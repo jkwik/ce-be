@@ -1,6 +1,11 @@
 from flask import Flask, request, make_response
 from flask_sqlalchemy import SQLAlchemy, inspect
 from flask_cors import CORS
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 
 # Create a new instance of a flask app
 app = Flask(__name__)
