@@ -11,9 +11,9 @@ CORS(app, supports_credentials=True)
 # this connection string would be set as an environment variable
 # TODO: Change this url
 # app.config["SQLALCHEMY_DATABASE_URI"] = "postgres://spike:CS506SP1KE@spike.c5vhczbpkz10.us-east-2.rds.amazonaws.com:5432/spike"
-app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+# app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
+# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# db = SQLAlchemy(app)
 
 @app.route("/health", methods=["GET"])
 def health():
