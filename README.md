@@ -8,3 +8,11 @@ CoachEasy repository to house backend code
 
 ## Running the application
 - Run `make run`. This will pull the DATABASE_URL from heroku and start the application
+
+## Connecting to our database using pgAdmin 4
+- Download pgAdmin 4 https://www.pgadmin.org/download/
+- Open up a new pgAdmin 3 window
+- Right click servers -> create server
+- Under connection tab: Enter in credentials from the heroku database credentials tab. Make sure that you enter the name of our database in Maintenance database.
+- Under advanced under `DB Restriction` enter the name of our database again.
+- Click save

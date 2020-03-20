@@ -14,7 +14,6 @@ CORS(app, supports_credentials=True)
 
 # Set the database uri to the config var and create a connection to the db. In a real production app
 # this connection string would be set as an environment variable
-# TODO: Change this url
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv
 # app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
