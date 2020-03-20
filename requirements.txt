@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+psycopg2-binary
+pylint-flask
+flask_marshmallow
+flask-cors
+gevent
+gunicorn
+marshmallow-sqlalchemy
