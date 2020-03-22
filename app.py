@@ -87,6 +87,37 @@ def approveClient():
         "user": result
     }
 
+@app.route('/updateProfile', methods=['PUT'])
+def updateProfile():
+    body = request.get_json(force=True)
+    user = User()
+    # retrieve user with id passed in
+    user = User.query.get(body['id'])
+
+    if body['access_token'] == user.access_token:
+        try:
+            # update the approved field for this user
+            user.approved = True
+            db.session.commit()
+        except:
+            return {
+                "error": "could not approve client for this user"
+            }
+    else:
+        return {
+                "error": "incorrect access token"
+        }
+    # Refresh the user to grab the id
+    db.session.refresh(user)
+
+    # Grab the user from the database and dump the result into a user schema
+    user = User.query.get(user.id)
+    result = user_schema.dump(user)
+    # Return the user
+    return {
+        "user": result
+    }
+
 @app.route('/clientList', methods=['GET'])
 def clientList():
     body = request.get_json(force=True)
@@ -95,7 +126,7 @@ def clientList():
     user = User.query.get(body['id'])
     
     # check that the user is the coach
-    if user.id == 1:
+    if body['access_token'] == user.access_token and user.id == 1:
         try:
             # retrieve and return list of clients
             clients = User.query.filter(User.coach_id == 1).all()
