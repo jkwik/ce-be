@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response, jsonify
+from flask import Flask, request, make_response
 from flask_sqlalchemy import SQLAlchemy, inspect
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -62,7 +62,7 @@ def approveClient():
     # retrieve user with id passed in
     user = User.query.get(body['id'])
 
-    if body['access_token'] == user.access_token :
+    if body['access_token'] == user.access_token:
         try:
             # update the approved field for this user
             user.approved = True
@@ -86,4 +86,39 @@ def approveClient():
     return {
         "user": result
     }
+
+@app.route('/clientList', methods=['GET'])
+def clientList():
+    body = request.get_json(force=True)
+    user = User()
+    # retrieve user with id passed in
+    user = User.query.get(body['id'])
+    
+    # check that the user is the coach
+    if user.id == 1:
+        try:
+            # retrieve and return list of clients
+            clients = User.query.filter(User.coach_id == 1).all()
+            results = [
+                {
+                    "user_id": client.id,
+                    "first_name": client.first_name
+                }for client in clients
+            ]
+            return {
+                "clients": results
+            } 
+        except:
+            return {
+                "error": "could not list clients"
+            }
+    else:
+        return {
+                "permission error": "only the coach can view a client list"
+        }
+    
+    # Refresh the user to grab the id
+    db.session.refresh(user)
+
+
 
