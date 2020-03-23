@@ -131,7 +131,7 @@ def signUp():
 @app.route('/approveClient', methods=['PUT'])
 def approveClient():
     body = request.get_json(force=True)
-    # cookie_access_token = request.cookies.get('access_token')
+    cookie_access_token = request.cookies.get('access_token')
 
     # Check that the role of the requestee is COACH
     try:
@@ -151,19 +151,19 @@ def approveClient():
     user = User.query.get(body['id'])
 
     # TODO: change the access token check to 
-        # if cookie_access_token == user.access_token:
-    if body['access_token'] == user.access_token:
+    if cookie_access_token == user.access_token:
+    # if body['access_token'] == user.access_token:
         try:
             # update the approved field for this user
             user.approved = True
             db.session.commit()
         except:
             return {
-                "error": "could not approve client for this user"
+                "error": "could not approve client"
             }
     else:
         return {
-                "error": "incorrect access token"
+                "error": cookie_access_token
         }
     
     # Refresh the user to grab the id

@@ -18,7 +18,6 @@ class User(db.Model):
     check_in = db.Column(db.Boolean, nullable=True)
     coach_id = db.Column(db.Integer, nullable=True)
     access_token = db.Column(db.String, nullable=True)
-
     role = db.Column(db.String, nullable=False)
     verification_token = db.Column(db.String, nullable=True)
 
