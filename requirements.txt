@@ -8,3 +8,7 @@ gevent
 gunicorn
 marshmallow-sqlalchemy
 python-dotenv
+email_validator
+flask-bcrypt
+pyjwt==1.4.2
+flask-session
