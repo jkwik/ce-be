@@ -189,3 +189,81 @@ def verifyUser():
 
     # Redirect to the frontend homepage
     return redirect(os.getenv("FRONTEND_URL"), code=302)
+
+@app.route("/auth/login", methods=["POST"])
+def login():
+    body = request.get_json(force=True)
+
+    # Validate that the email is the correct format
+    try:
+        v = validate_email(body['email']) # validate and get info
+        body['email'] = v["email"] # replace with normalized form
+    except EmailNotValidError as e:
+        # email is not valid, return error code
+        return {
+            "error": "Invalid Email Format"
+        }, 406
+
+    # Grab user from the database given email and password combination
+    user = User.query.filter_by(email=body['email']).first()
+    if user == None:
+        return {
+            "error": "Invalid username or password"
+        }, 404
+
+    # Check that the passwords match
+    if not bcrypt.check_password_hash(user.password, body['password'].encode(encoding='utf-8')):
+        return {
+            "error": "Invalid username or password"
+        }, 404
+
+    token = ''
+
+    # If the users access_token is empty, create a new one for them
+    if user.access_token == '' or user.access_token == None:
+        token = user.encode_auth_token({
+            'id': user.id,
+            'role': user.role
+        })
+
+        # Update the users access_token
+        user.access_token = token
+        db.session.commit()
+    else:
+        # If the user has an access token, check if it is expired
+        payload = user.decode_auth_token(user.access_token)
+        if payload == 'Expired':
+            print('expired')
+            token = user.encode_auth_token({
+                'id': user.id,
+                'role': user.role
+            })
+
+            # Update the users access_token
+            user.access_token = token
+            db.session.commit()
+        elif payload == 'Invalid':
+            # Invalid tokens are intolerable
+            print('User with email ' + user.email + ' has invalid access_token')
+            return {
+                "error": "Internal Server Error"
+            }, 500
+        else:
+            # If the access_token is valid and is non empty, we use this token
+            token = user.access_token
+
+    # Set the access_token in the session
+    session['access_token'] = token
+
+    # Parse the result of the user query
+    result = user_schema.dump(user)
+
+    # Delete the sensitive information
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    return {
+        "user": result
+    }
+
