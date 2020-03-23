@@ -22,7 +22,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
-from models import User, user_schema
+from models import User, user_schema, Role
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -47,9 +47,25 @@ def signUp():
     # Encrypt the password
     encodedPassword = bcrypt.generate_password_hash(body['password'])
 
+    # Check that they've passed a valid role
+    try:
+        role = body['role']
+
+        if role != Role.CLIENT.name and role != Role.COACH.name:
+            return {
+                "error": "Expected role of COACH or CLIENT"
+            }, 400
+    except:
+        return {
+            "error": "Expected role of COACH or CLIENT"
+        }, 400
+
     # Create the user with the encoded password
-    user = User()
-    user = User(first_name=body['first_name'], last_name=body['last_name'], email=body['email'], password=encodedPassword)
+    user = User(
+        first_name=body['first_name'], last_name=body['last_name'],
+        email=body['email'], password=encodedPassword,
+        approved=False, role=body['role']
+    )
 
     try:
         db.session.add(user)
@@ -73,6 +89,8 @@ def signUp():
 
     # Delete the password from the response, we don't want to transfer this over the wire
     del result['password']
+    # Delete the access token as we don't want this to be in the resopnse
+    del result['access_token']
 
     # Return the user
     return {
