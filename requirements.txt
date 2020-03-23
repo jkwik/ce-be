@@ -8,3 +8,5 @@ gevent
 gunicorn
 marshmallow-sqlalchemy
 python-dotenv
+email_validator
+flask-bcrypt
