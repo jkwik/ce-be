@@ -13,8 +13,8 @@ CORS(app, supports_credentials=True)
 
 # Set the database uri to the config var and create a connection to the db. In a real production app
 # this connection string would be set as an environment variable
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv
-# app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -33,13 +33,14 @@ def signUp():
 
     user = User(first_name=body['first_name'], last_name=body['last_name'], email=body['email'], password=body['password'])
 
-    try:
-        db.session.add(user)
-        db.session.commit()
-    except:
-        return {
-            "error": "403"
-        }
+    # try:
+    db.session.add(user)
+    db.session.commit()
+    # except error:
+    #     print(error)
+    #     return {
+    #         "error": "403"
+    #     }
 
     # Refresh the user to grab the id
     db.session.refresh(user)
