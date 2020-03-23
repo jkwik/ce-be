@@ -1,4 +1,4 @@
-from flask import Flask, request, make_response, session
+from flask import Flask, request, make_response, session, redirect
 from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy, inspect
 from flask_cors import CORS
@@ -187,6 +187,5 @@ def verifyUser():
     user.verified = True
     db.session.commit()
 
-    return {
-        "success": True
-    }
+    # Redirect to the frontend homepage
+    return redirect(os.getenv("FRONTEND_URL"), code=302)
