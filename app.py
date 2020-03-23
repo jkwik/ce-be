@@ -57,7 +57,7 @@ def signUp():
         }, 406
 
     # Encrypt the password
-    encodedPassword = bcrypt.generate_password_hash(body['password'])
+    encodedPassword = bcrypt.generate_password_hash(body['password']).decode(encoding="utf-8")
 
     # Check that they've passed a valid role
     try:
