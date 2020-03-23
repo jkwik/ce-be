@@ -12,3 +12,4 @@ email_validator
 flask-bcrypt
 pyjwt==1.4.2
 flask-session
+flask-mail
