@@ -2,6 +2,7 @@ from flask import Flask, request, make_response
 from flask_sqlalchemy import SQLAlchemy, inspect
 from flask_cors import CORS
 from dotenv import load_dotenv
+from sqlalchemy.exc import IntegrityError
 import os
 
 load_dotenv()
@@ -33,14 +34,13 @@ def signUp():
 
     user = User(first_name=body['first_name'], last_name=body['last_name'], email=body['email'], password=body['password'])
 
-    # try:
-    db.session.add(user)
-    db.session.commit()
-    # except error:
-    #     print(error)
-    #     return {
-    #         "error": "403"
-    #     }
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        return {
+            "error": "403"
+        }
 
     # Refresh the user to grab the id
     db.session.refresh(user)
