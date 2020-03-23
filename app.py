@@ -19,7 +19,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-from models import User, user_schema
+from models import User, user_schema, Role
 
 @app.route("/health", methods=['GET'])
 def health():
@@ -57,10 +57,27 @@ def signUp():
 @app.route('/approveClient', methods=['PUT'])
 def approveClient():
     body = request.get_json(force=True)
-    user = User()
+    # cookie_access_token = request.cookies.get('access_token')
+
+    # Check that the role of the requestee is COACH
+    try:
+        role = body['role']
+
+        if role != Role.COACH.name:
+            return {
+                "error": "Expected role of COACH"
+            }, 400
+    except:
+        return {
+            "error": "Expected role of COACH or CLIENT"
+        }, 400
+
     # retrieve user with id passed in
+    user = User()
     user = User.query.get(body['id'])
 
+    # TODO: change the access token check to 
+        # if cookie_access_token == user.access_token:
     if body['access_token'] == user.access_token:
         try:
             # update the approved field for this user
@@ -77,78 +94,20 @@ def approveClient():
     
     # Refresh the user to grab the id
     db.session.refresh(user)
-
     # Grab the user from the database and dump the result into a user schema
     user = User.query.get(user.id)
     result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
     # Return the user
     return {
         "user": result
     }
 
-@app.route('/updateProfile', methods=['PUT'])
-def updateProfile():
-    body = request.get_json(force=True)
-    user = User()
-    # retrieve user with id passed in
-    user = User.query.get(body['id'])
 
-    if body['access_token'] == user.access_token:
-        try:
-            # update the approved field for this user
-            user.approved = True
-            db.session.commit()
-        except:
-            return {
-                "error": "could not approve client for this user"
-            }
-    else:
-        return {
-                "error": "incorrect access token"
-        }
-    # Refresh the user to grab the id
-    db.session.refresh(user)
 
-    # Grab the user from the database and dump the result into a user schema
-    user = User.query.get(user.id)
-    result = user_schema.dump(user)
-    # Return the user
-    return {
-        "user": result
-    }
-
-@app.route('/clientList', methods=['GET'])
-def clientList():
-    body = request.get_json(force=True)
-    user = User()
-    # retrieve user with id passed in
-    user = User.query.get(body['id'])
-    
-    # check that the user is the coach
-    if body['access_token'] == user.access_token and user.id == 1:
-        try:
-            # retrieve and return list of clients
-            clients = User.query.filter(User.coach_id == 1).all()
-            results = [
-                {
-                    "user_id": client.id,
-                    "first_name": client.first_name
-                }for client in clients
-            ]
-            return {
-                "clients": results
-            } 
-        except:
-            return {
-                "error": "could not list clients"
-            }
-    else:
-        return {
-                "permission error": "only the coach can view a client list"
-        }
-    
-    # Refresh the user to grab the id
-    db.session.refresh(user)
 
 
 
