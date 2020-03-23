@@ -14,8 +14,7 @@ CORS(app, supports_credentials=True)
 # Set the database uri to the config var and create a connection to the db. In a real production app
 # this connection string would be set as an environment variable
 
-                        # app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv
-app.config["SQLALCHEMY_DATABASE_URI"] = "postgres://nvjgfrayuptlkt:e7d1e4aeddb1b44888b9817872f22fc522d332bb0d453b1633bbf8688f57d266@ec2-18-235-20-228.compute-1.amazonaws.com:5432/d784oou6iuu63p"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 # app.config["SECRET_KEY"] = 'S3CRET!K3Y11!'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
