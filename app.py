@@ -92,7 +92,8 @@ def signUp():
     user = User(
         first_name=body['first_name'], last_name=body['last_name'],
         email=body['email'], password=encodedPassword,
-        approved=False, role=body['role']
+        approved=False, role=body['role'],
+        verified=False
     )
 
     try:
@@ -157,4 +158,35 @@ def signUp():
     # Return the user
     return {
         "user": result
+    }
+
+@app.route("/verifyUser", methods=["GET"])
+def verifyUser():
+    # Grab the verification token from the query parameter
+    verificationToken = request.args.get('verification_token')
+    email = request.args.get('email')
+
+    if verificationToken == None:
+        return {
+            "error": "No verification_token present in query parameter"
+        }, 400
+    if email == None:
+        return {
+            "error": "No email present in query parameter"
+        }, 400
+
+    # Check that the verification_token belongs to the email
+    user = User.query.filter_by(email=email, verification_token=verificationToken).first()
+    if user == None:
+        return {
+            "error": "Invalid verification_token or email"
+        }, 404
+
+    # If it does, then we set the verified field to True and remove the verification_token
+    user.verification_token = ''
+    user.verified = True
+    db.session.commit()
+
+    return {
+        "success": True
     }

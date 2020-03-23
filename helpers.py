@@ -10,7 +10,7 @@ def sendVerificationEmail(mail, to, first_name, last_name, verification_token):
         callback = os.getenv("DEV_ROOT_URL")
     else:
         callback = os.getenv("PROD_ROOT_URL")
-    callback = callback + 'verifyUser?verification_token=' + verification_token
+    callback = callback + 'verifyUser?email=' + to[0] + '&' + 'verification_token=' + verification_token
 
     try:
         msg = Message(
