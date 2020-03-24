@@ -63,7 +63,7 @@ def middleware(token_claims):
 @app.route("/health", methods=["GET"])
 def health():
     return {
-        "Success": True
+        "success": True
     }
 
 @app.route("/signUp", methods=["POST"])
@@ -274,3 +274,29 @@ def login():
         "user": result
     }
 
+@app.route("/auth/logout", methods=["GET"])
+def logout():
+    # Grab the access_token from the session
+    token = session.get('access_token')
+    if token == None or token == "":
+        return {
+            "error": "No user is currently logged in"
+        }, 400
+
+    # Check that there is a user who has the access_token
+    user = User.query.filter_by(access_token=token).first()
+    if user == None:
+        return {
+            "error": "Invalid access token"
+        }, 400
+
+    # Set the users access token to an empty string in the db
+    user.access_token = ''
+    db.session.commit()
+
+    # Delete the access_token cookie from session
+    session.pop('access_token')
+
+    return {
+        "success": True
+    }

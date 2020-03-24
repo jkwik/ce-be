@@ -35,9 +35,9 @@ def http_guard(renew=True, nullable=False):
             # Check that there is a user who owns the access_token. Return unauthorized
             # if nullable is False
             user = User.query.filter_by(access_token=token).first()
-            if user == None and nullable == False:
+            if user == None:
                 return {
-                    "error": "Unauthorized. Invalid login token"
+                    "error": "Unauthorized. Invalid access token"
                 }, 401
 
             # Check that the token is expired or not. Renew it if renew is True
