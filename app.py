@@ -125,13 +125,13 @@ def signUp():
 
     # Return the user
     return {
-        "user": result
+        "user": session['access_token']
     }
 
 @app.route('/approveClient', methods=['PUT'])
 def approveClient():
     body = request.get_json(force=True)
-    cookie_access_token = request.cookies.get('access_token')
+    cookie_access_token = session.get('access_token', 'not set')
 
     # Check that the role of the requestee is COACH
     try:
@@ -149,18 +149,19 @@ def approveClient():
     # retrieve user with id passed in
     user = User()
     user = User.query.get(body['id'])
-
+    decode = user.decode_auth_token(session.get('access_token', 'not set'))
     # TODO: change the access token check to 
-    if cookie_access_token == user.access_token:
+    if cookie_access_token == decode:
     # if body['access_token'] == user.access_token:
         try:
             # update the approved field for this user
             user.approved = True
             db.session.commit()
-        except:
+        except Exception as e:
             return {
-                "error": "could not approve client"
-            }
+                "error": "Internal Server Error"
+            }, 500
+            raise
     else:
         return {
                 "error": cookie_access_token
@@ -179,6 +180,47 @@ def approveClient():
     return {
         "user": result
     }
+
+@app.route('/clientList', methods=['GET'])
+def clientList():
+    body = request.get_json(force=True)
+
+    # Check that the role of the requestee is COACH
+    # try:
+    #     role = body['role']
+
+    #     if role != Role.COACH.name:
+    #         return {
+    #             "error": "Expected role of COACH"
+    #         }, 400
+    # except:
+    #     return {
+    #         "error": "Expected role of COACH or CLIENT"
+    #     }, 400
+
+    # retrieve user with id passed in
+    user = User()
+    
+    # TODO: change the access token check to 
+    # if body['access_token'] == user.access_token:
+    try:
+         # update the approved field for this user
+        user = User.query.filter_by(coach_id=body['coach_id']).first()
+        result = user_schema.dump(user)
+        # remove the sensitive data fields
+        del result['password']
+        del result['access_token']
+        del result['verification_token']
+        # Return the user
+        return {
+            "user": result
+        }
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+  
 
 
 

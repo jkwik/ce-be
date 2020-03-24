@@ -41,16 +41,31 @@ class User(db.Model):
         except Exception as e:
             return e
 
+    @staticmethod
+    def decode_auth_token(auth_token):
+        """
+        Decodes the auth token
+        :param auth_token:
+        :return: integer|string
+        """
+        try:
+            payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
+            return payload['sub']
+        except jwt.ExpiredSignatureError:
+            return 'Signature expired. Please log in again.'
+        except jwt.InvalidTokenError:
+            return 'Invalid token. Please log in again.'
+
+
 class UserSchema(ma.Schema):
     class Meta:
         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
 
-class UsersSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
+# class UserSchemas(ma.Schema):
+#     class Meta:
+#         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
 
 user_schema = UserSchema()
-users_schema = UsersSchema(many=True)
 
 class Role(Enum):
     COACH = 'COACH'
