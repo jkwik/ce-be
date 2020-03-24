@@ -20,6 +20,7 @@ class User(db.Model):
     access_token = db.Column(db.String, nullable=True)
     role = db.Column(db.String, nullable=False)
     verification_token = db.Column(db.String, nullable=True)
+    verified = db.Column(db.Boolean, nullable=False)
 
     def encode_auth_token(self, sub):
         """
@@ -29,7 +30,7 @@ class User(db.Model):
         """
         try:
             payload = {
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, hours=5),
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, hours=2),
                 'iat': datetime.datetime.utcnow(),
                 'sub': sub
             }
@@ -52,14 +53,13 @@ class User(db.Model):
             payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
             return payload['sub']
         except jwt.ExpiredSignatureError:
-            return 'Signature expired. Please log in again.'
+            return 'Expired'
         except jwt.InvalidTokenError:
-            return 'Invalid token. Please log in again.'
-
+            return 'Invalid'
 
 class UserSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
+        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token', 'verified')
 
 # class UserSchemas(ma.Schema):
 #     class Meta:

@@ -1,5 +1,6 @@
 # ce-be
 CoachEasy repository to house backend code
+Root endpoint: https://coach-easy-deploy.herokuapp.com/
 
 ## Setup instructions
 - Install the heroku cli from https://devcenter.heroku.com/articles/heroku-cli
