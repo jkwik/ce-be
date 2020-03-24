@@ -51,6 +51,14 @@ mail = Mail(app)
 
 from models import User, user_schema, Role
 from helpers import sendVerificationEmail
+from middleware import http_guard
+
+@app.route("/middleware", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def middleware(token_claims):
+    return {
+        "token_claims": token_claims
+    }
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -233,7 +241,6 @@ def login():
         # If the user has an access token, check if it is expired
         payload = user.decode_auth_token(user.access_token)
         if payload == 'Expired':
-            print('expired')
             token = user.encode_auth_token({
                 'id': user.id,
                 'role': user.role
