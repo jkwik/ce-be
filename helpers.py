@@ -24,3 +24,47 @@ def sendVerificationEmail(mail, to, first_name, last_name, verification_token):
         return None
     except Exception as e:
         return e
+
+def sendApprovedEmail(mail, to, first_name, last_name):
+    # Create the callback URL
+    callback = ''
+    if app.config["ENV"] == 'development':
+        callback = os.getenv("DEV_FRONTEND_URL")
+    else:
+        callback = os.getenv("PROD_ROOT_URL")
+    callback = callback + 'auth/login'
+
+    try:
+        msg = Message(
+            "You've Been Approved!",
+            sender="we.coach.easy@gmail.com",
+            recipients=to
+        )
+        msg.body = 'Hello ' + first_name + ' ' + last_name + ',\n' + "You've been successfully approved. You are now able to login to your account.\n" + callback
+        msg.html = render_template("approved.html", name=first_name+' '+last_name, callback=callback)
+        mail.send(msg)
+        return None
+    except Exception as e:
+        return e
+
+def forgotPasswordEmail(mail, to, first_name, last_name, reset_token):
+    # Create the callback URL
+    callback = ''
+    if app.config["ENV"] == 'development':
+        callback = os.getenv("DEV_FRONTEND_URL")
+    else:
+        callback = os.getenv("PROD_ROOT_URL")
+    callback = callback + 'resetPassword?email=' + to[0] + '&' + 'reset_token=' + reset_token
+
+    try:
+        msg = Message(
+            "Forgot Password?",
+            sender="we.coach.easy@gmail.com",
+            recipients=to
+        )
+        msg.body = 'Hello ' + first_name + ' ' + last_name + ',\n' + "Reset password by clicking the button below.\n" + callback
+        msg.html = render_template("forgotPassword.html", name=first_name+' '+last_name, callback=callback)
+        mail.send(msg)
+        return None
+    except Exception as e:
+        return e
