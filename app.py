@@ -167,7 +167,7 @@ def signUp():
 
     # Return the user
     return {
-        "user": session['access_token']
+        "user": result
     }
 
 @app.route('/approveClient', methods=['PUT'])
