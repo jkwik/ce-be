@@ -273,6 +273,9 @@ def clientList(token_claims):
 def updateProfile(token_claims):
     # email = request.args.get('email')
     body = request.get_json(force=True)
+     # retrieve user with id passed in
+    user = User()
+    user = User.query.get(token_claims['id'])
     # check which parameters were passed into this function
     if 'email' in body:
         newEmail = True
@@ -297,15 +300,21 @@ def updateProfile(token_claims):
     else:
         newLastName = False
     
-    if 'password' in body:
+    if 'newPassword' in body:
+        # check that the current password field was entered
+        if 'currentPassword' not in body:
+            return{
+                "error": "User must enter current password"
+            }
+        # check that the currentPassword matches the current password in the database
+        if not bcrypt.check_password_hash(user.password, body['currentPassword'].encode(encoding='utf-8')):
+            return {
+                "error": "Input password doesn't match current password"
+            }, 400
         newPassword = True
-        encodedPassword = bcrypt.generate_password_hash(body['password']).decode(encoding="utf-8")     
+        encodedPassword = bcrypt.generate_password_hash(body['newPassword']).decode(encoding="utf-8")
     else:
         newPassword = False
-
-    # retrieve user with id passed in
-    user = User()
-    user = User.query.get(token_claims['id'])
 
      # update the requested fields for this user
     try:
@@ -330,7 +339,7 @@ def updateProfile(token_claims):
     user = User.query.get(user.id)
     result = user_schema.dump(user)
     # remove the sensitive data fields
-    # del result['password']
+    del result['password']
     del result['access_token']
     del result['verification_token']
     # Return the user
@@ -549,3 +558,42 @@ def resetPassword():
     # Redirect to the frontend homepage
     login = os.getenv("FRONTEND_URL") + 'auth/login'
     return redirect(login, code=302)
+
+# terminate client endpoint
+@app.route("/terminateClient", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def terminateClient(token_claims):
+    body = request.get_json(force=True)
+    # Check that the role of the requestee is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(body['id'])
+
+    try:
+        # update the approved field for this user to null
+        user.approved = None
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": body['id']
+        }, 500
+        raise
+
+    # Grab the user from the database and dump the result into a user schema
+    user = User.query.get(user.id)
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    db.session.close()
+    # Return the user
+    return {
+        "Approved": result
+    }
