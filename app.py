@@ -595,5 +595,5 @@ def terminateClient(token_claims):
     db.session.close()
     # Return the user
     return {
-        "Approved": result
+        "user": result
     }
