@@ -178,7 +178,7 @@ def approveClient(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+        }, 400
 
     # retrieve user with id passed in
     user = User()
