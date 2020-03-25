@@ -31,7 +31,7 @@ def sendApprovedEmail(mail, to, first_name, last_name):
     if app.config["ENV"] == 'development':
         callback = os.getenv("FRONTEND_URL")
     else:
-        callback = os.getenv("PROD_ROOT_URL")
+        callback = os.getenv("DEV_FRONTEND_URL")
     callback = callback + 'auth/login'
 
     try:
