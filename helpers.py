@@ -32,7 +32,7 @@ def sendApprovedEmail(mail, to, first_name, last_name):
         callback = os.getenv("FRONTEND_URL")
     else:
         callback = os.getenv("DEV_FRONTEND_URL")
-    callback = callback + 'auth/login'
+    callback = callback + 'login'
 
     try:
         msg = Message(
