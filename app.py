@@ -269,7 +269,7 @@ def clientList(token_claims):
         raise
 
 @app.route('/updateProfile', methods=['PUT'])
-@http_guard(renew=True, nullable=True)
+@http_guard(renew=True, nullable=False)
 def updateProfile(token_claims):
     # email = request.args.get('email')
     body = request.get_json(force=True)
