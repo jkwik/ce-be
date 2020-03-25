@@ -21,6 +21,7 @@ class User(db.Model):
     role = db.Column(db.String, nullable=False)
     verification_token = db.Column(db.String, nullable=True)
     verified = db.Column(db.Boolean, nullable=False)
+    reset_token = db.Column(db.String, nullable=True)
 
     def encode_auth_token(self, sub):
         """
@@ -59,10 +60,16 @@ class User(db.Model):
 
 class UserSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token', 'verified')
+        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token', 'verified', 'reset_token')
+
+# class UserSchemas(ma.Schema):
+#     class Meta:
+#         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
 
 user_schema = UserSchema()
+user_schemas = UserSchema(many=True)
 
 class Role(Enum):
     COACH = 'COACH'
     CLIENT = 'CLIENT'
+

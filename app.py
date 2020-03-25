@@ -49,8 +49,8 @@ mail = Mail(app)
 # session = Session(app)
 # session.app.session_interface.db.create_all()
 
-from models import User, user_schema, Role
-from helpers import sendVerificationEmail
+from models import User, user_schema, Role, user_schemas
+from helpers import sendVerificationEmail, sendApprovedEmail, forgotPasswordEmail
 from middleware import http_guard
 
 @app.route("/middleware", methods=["GET"])
@@ -60,13 +60,13 @@ def middleware(token_claims):
         "token_claims": token_claims
     }
 
-@app.route("/health", methods=["GET"])
+@app.route("/health", methods=['GET'])
 def health():
     return {
         "success": True
     }
 
-@app.route("/signUp", methods=["POST"])
+@app.route("/signUp", methods=['POST'])
 def signUp():
     body = request.get_json(force=True)
 
@@ -163,10 +163,190 @@ def signUp():
     del result['access_token']
     del result['verification_token']
 
+    db.session.close()
+
     # Return the user
     return {
         "user": result
     }
+
+@app.route('/approveClient', methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def approveClient(token_claims):
+    body = request.get_json(force=True)
+    # Check that the role of the requestee is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(body['id'])
+
+    try:
+        # update the approved field for this user
+        user.approved = True
+        # set coach_id to the id of the coach that is currently logged in
+        user.coach_id = token_claims['id']
+        db.session.commit()
+
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # Grab the user from the database and dump the result into a user schema
+    user = User.query.get(user.id)
+
+    # Send an approved email
+    err = sendApprovedEmail(mail, [user.email], user.first_name, user.last_name)
+    if err != None:
+        print(err)
+        db.session.rollback()
+        return {
+             "error": "Internal Server Error"
+        }, 500
+    
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    db.session.close()
+    # Return the user
+    return {
+        "Approved": result
+    }
+
+@app.route('/clientList', methods=['GET'])
+@http_guard(renew=True, nullable=False)
+def clientList(token_claims):
+    # Check that the role of the requestee is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
+    # retrieve list of clients 
+    try:
+        clients = User.query.filter_by(role='CLIENT').all()
+        result = user_schemas.dump(clients)
+        # create array's for type of client
+        approvedClients = []
+        unapprovedClients = []
+        pastClients = []
+        for client in result:
+            # remove sensitive data
+            del client['password']
+            del client['access_token']
+            del client['verification_token']
+
+            # check client's approved filed
+            # if approved this is a current client
+            if client['approved'] == True:
+                approvedClients.append(client)
+            # if unapproved this is a client awaiting approval
+            elif client['approved'] == False:
+                unapprovedClients.append(client)
+            # if null, this is a past client
+            else:
+                pastClients.append(client)
+        # Return the clients
+        # close db connection
+        db.session.close()
+        return {
+            "approvedclients": approvedClients,
+            "unapprovedClients": unapprovedClients,
+            "pastClients": pastClients
+        }
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+@app.route('/updateProfile', methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def updateProfile(token_claims):
+    # email = request.args.get('email')
+    body = request.get_json(force=True)
+     # retrieve user with id passed in
+    user = User()
+    user = User.query.get(token_claims['id'])
+    # check which parameters were passed into this function
+    if 'email' in body:
+        newEmail = True
+        try:
+            v = validate_email(body["email"]) # validate and get info
+            email = v["email"] # replace with normalized form
+        except EmailNotValidError as e:
+            # email is not valid, return error code
+            return {
+                "error": "Invalid Email Format"
+            }, 406
+    else:
+        newEmail = False
+
+    if 'first_name' in body:
+        newFirstName = True
+    else:
+        newFirstName = False
+
+    if 'last_name' in body:
+        newLastName = True
+    else:
+        newLastName = False
+    
+    if 'newPassword' in body:
+        # check that the current password field was entered
+        if 'currentPassword' not in body:
+            return{
+                "error": "User must enter current password"
+            }
+        # check that the currentPassword matches the current password in the database
+        if not bcrypt.check_password_hash(user.password, body['currentPassword'].encode(encoding='utf-8')):
+            return {
+                "error": "Input password doesn't match current password"
+            }, 400
+        newPassword = True
+        encodedPassword = bcrypt.generate_password_hash(body['newPassword']).decode(encoding="utf-8")
+    else:
+        newPassword = False
+
+     # update the requested fields for this user
+    try:
+        if newEmail == True:
+            user.email = email
+        if newFirstName == True:
+            user.first_name = body['first_name']
+        if newLastName == True:
+            user.last_name = body['last_name']
+        if newPassword == True:
+            user.password = encodedPassword
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # Refresh the user to grab the id
+    db.session.refresh(user)
+    # Grab the user from the database and dump the result into a user schema
+    user = User.query.get(user.id)
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+    # Return the user
+    db.session.close()
+    return {
+        "user": result
+    }  
 
 @app.route("/verifyUser", methods=["GET"])
 def verifyUser():
@@ -194,6 +374,7 @@ def verifyUser():
     user.verification_token = ''
     user.verified = True
     db.session.commit()
+    db.session.close()
 
     # Redirect to the frontend homepage
     return redirect(os.getenv("FRONTEND_URL"), code=302)
@@ -269,7 +450,7 @@ def login():
     del result['password']
     del result['access_token']
     del result['verification_token']
-
+    db.session.close()
     return {
         "user": result
     }
@@ -296,7 +477,123 @@ def logout():
 
     # Delete the access_token cookie from session
     session.pop('access_token')
-
+    db.session.close()
     return {
         "success": True
+    }
+
+@app.route("/forgotPassword", methods=["GET"])
+def forgotPassword():
+    body = request.get_json(force=True)
+    # validate email format
+    try:
+        v = validate_email(body['email']) # validate and get info
+        body['email'] = v["email"] # replace with normalized form
+    except EmailNotValidError as e:
+        # email is not valid, return error code
+        return {
+            "error": "Invalid Email Format"
+        }, 406
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.filter_by(email=body['email']).first()
+
+    if user == None:
+        return {
+            "error": "Invalid email: Email not found"
+        }, 404
+
+    # create a reset token and set it to be this user's reset token
+    resetToken = uuid.uuid1()
+    user.reset_token = resetToken
+    db.session.commit()
+
+    # send forgot password email to the user
+    err = forgotPasswordEmail(mail, [body['email']], user.first_name, user.last_name, str(resetToken))
+    if err != None:
+        print(err)
+        db.session.rollback()
+        return {
+             "error": "Internal Server Error"
+        }, 500
+    db.session.close()
+    return {
+        "success": True
+    }
+
+@app.route("/resetPassword", methods=["POST"])
+def resetPassword():
+    body = request.get_json(force=True)
+    # Grab the verification token from the query parameter
+    resetToken = body['reset_token']
+    email = body['email']
+    password = body['password']
+
+    if resetToken == None:
+        return {
+            "error": "No reset_token present in query parameter"
+        }, 400
+    if email == None:
+        return {
+            "error": "No email present in query parameter"
+        }, 400
+
+    # Check that the verification_token belongs to the email
+    user = User.query.filter_by(email=email, reset_token=resetToken).first()
+    if user == None:
+        return {
+            "error": "Invalid reset_token or email"
+        }, 404
+
+    # If it does, then we set the verified field to True and remove the verification_token
+    
+    user.reset_token = ''
+    # Encrypt the password
+    encodedPassword = bcrypt.generate_password_hash(password).decode(encoding="utf-8")
+    user.password = encodedPassword
+    db.session.commit()
+    db.session.close()
+
+    # Redirect to the frontend homepage
+    login = os.getenv("FRONTEND_URL") + 'auth/login'
+    return redirect(login, code=302)
+
+# terminate client endpoint
+@app.route("/terminateClient", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def terminateClient(token_claims):
+    body = request.get_json(force=True)
+    # Check that the role of the requestee is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(body['id'])
+
+    try:
+        # update the approved field for this user to null
+        user.approved = None
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": body['id']
+        }, 500
+        raise
+
+    # Grab the user from the database and dump the result into a user schema
+    user = User.query.get(user.id)
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    db.session.close()
+    # Return the user
+    return {
+        "user": result
     }
