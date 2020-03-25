@@ -287,10 +287,6 @@ def updateProfile(token_claims):
     else:
         newEmail = False
 
-    # retrieve user with id passed in
-    user = User()
-    user = User.query.get(token_claims['id'])
-
     if 'first_name' in body:
         newFirstName = True
     else:
@@ -307,6 +303,9 @@ def updateProfile(token_claims):
     else:
         newPassword = False
 
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(token_claims['id'])
 
      # update the requested fields for this user
     try:
