@@ -163,6 +163,8 @@ def signUp():
     del result['access_token']
     del result['verification_token']
 
+    db.session.close()
+
     # Return the user
     return {
         "user": session['access_token']
@@ -212,6 +214,8 @@ def approveClient(token_claims):
     del result['password']
     del result['access_token']
     del result['verification_token']
+
+    db.session.close()
     # Return the user
     return {
         "Approved": result
@@ -251,6 +255,8 @@ def clientList(token_claims):
             else:
                 pastClients.append(client)
         # Return the clients
+        # close db connection
+        db.session.close()
         return {
             "approvedclients": approvedClients,
             "unapprovedClients": unapprovedClients,
@@ -265,21 +271,24 @@ def clientList(token_claims):
 @app.route('/updateProfile', methods=['PUT'])
 @http_guard(renew=True, nullable=True)
 def updateProfile(token_claims):
-    email = request.args.get('email')
+    # email = request.args.get('email')
     body = request.get_json(force=True)
     # check which parameters were passed into this function
     if body['email'] != None:
-        try:
-            v = validate_email(body["email"]) # validate and get info
-            email = v["email"] # replace with normalized form
-        except EmailNotValidError as e:
-            # email is not valid, return error code
-            return {
-                "error": "Invalid Email Format"
-            }, 406
-    elif body['first_name'] != None:
+        email = True
+    if body['first_name'] != None:
         newFirstName = body['first_name']
+    if body['last_name'] != None:
+        newLastName = body['last_name']
 
+    try:
+        v = validate_email(body["email"]) # validate and get info
+        email = v["email"] # replace with normalized form
+    except EmailNotValidError as e:
+        # email is not valid, return error code
+        return {
+            "error": "Invalid Email Format"
+        }, 406
     # retrieve user with id passed in
     user = User()
     user = User.query.get(token_claims['id'])
@@ -288,10 +297,11 @@ def updateProfile(token_claims):
         # update the approved field for this user
         user.email = email
         user.first_name = newFirstName
+        user.last_name = newLastName
         db.session.commit()
     except Exception as e:
         return {
-            "error": email
+            "error": "internal server error"
         }, 500
         raise
 
@@ -305,6 +315,7 @@ def updateProfile(token_claims):
     del result['access_token']
     del result['verification_token']
     # Return the user
+    db.session.close()
     return {
         "user": result
     }  
@@ -335,6 +346,7 @@ def verifyUser():
     user.verification_token = ''
     user.verified = True
     db.session.commit()
+    db.session.close()
 
     # Redirect to the frontend homepage
     return redirect(os.getenv("FRONTEND_URL"), code=302)
@@ -410,7 +422,7 @@ def login():
     del result['password']
     del result['access_token']
     del result['verification_token']
-
+    db.session.close()
     return {
         "user": result
     }
@@ -437,7 +449,7 @@ def logout():
 
     # Delete the access_token cookie from session
     session.pop('access_token')
-
+    db.session.close()
     return {
         "success": True
     }
@@ -477,17 +489,18 @@ def forgotPassword():
         return {
              "error": "Internal Server Error"
         }, 500
-
+    db.session.close()
     return {
-        "success": resetToken
+        "success": True
     }
 
-@app.route("/resetPassword", methods=["GET"])
+@app.route("/resetPassword", methods=["POST"])
 def resetPassword():
     body = request.get_json(force=True)
     # Grab the verification token from the query parameter
-    resetToken = request.args.get('reset_token')
-    email = request.args.get('email')
+    resetToken = body['reset_token']
+    email = body['email']
+    password = body['password']
 
     if resetToken == None:
         return {
@@ -509,9 +522,10 @@ def resetPassword():
     
     user.reset_token = ''
     # Encrypt the password
-    encodedPassword = bcrypt.generate_password_hash('test').decode(encoding="utf-8")
+    encodedPassword = bcrypt.generate_password_hash(password).decode(encoding="utf-8")
     user.password = encodedPassword
     db.session.commit()
+    db.session.close()
 
     # Redirect to the frontend homepage
     login = os.getenv("FRONTEND_URL") + 'auth/login'
