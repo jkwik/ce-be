@@ -222,7 +222,7 @@ def approveClient(token_claims):
     }
 
 @app.route('/clientList', methods=['GET'])
-@http_guard(renew=True, nullable=True)
+@http_guard(renew=True, nullable=False)
 def clientList(token_claims):
     # Check that the role of the requestee is COACH
     if token_claims['role'] != Role.COACH.name:
