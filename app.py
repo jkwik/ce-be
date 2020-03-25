@@ -274,34 +274,54 @@ def updateProfile(token_claims):
     # email = request.args.get('email')
     body = request.get_json(force=True)
     # check which parameters were passed into this function
-    if body['email'] != None:
-        email = True
-    if body['first_name'] != None:
-        newFirstName = body['first_name']
-    if body['last_name'] != None:
-        newLastName = body['last_name']
+    if 'email' in body:
+        newEmail = True
+        try:
+            v = validate_email(body["email"]) # validate and get info
+            email = v["email"] # replace with normalized form
+        except EmailNotValidError as e:
+            # email is not valid, return error code
+            return {
+                "error": "Invalid Email Format"
+            }, 406
+    else:
+        newEmail = False
 
-    try:
-        v = validate_email(body["email"]) # validate and get info
-        email = v["email"] # replace with normalized form
-    except EmailNotValidError as e:
-        # email is not valid, return error code
-        return {
-            "error": "Invalid Email Format"
-        }, 406
     # retrieve user with id passed in
     user = User()
     user = User.query.get(token_claims['id'])
 
+    if 'first_name' in body:
+        newFirstName = True
+    else:
+        newFirstName = False
+
+    if 'last_name' in body:
+        newLastName = True
+    else:
+        newLastName = False
+    
+    if 'password' in body:
+        newPassword = True
+        encodedPassword = bcrypt.generate_password_hash(body['password']).decode(encoding="utf-8")     
+    else:
+        newPassword = False
+
+
+     # update the requested fields for this user
     try:
-        # update the approved field for this user
-        user.email = email
-        user.first_name = newFirstName
-        user.last_name = newLastName
+        if newEmail == True:
+            user.email = email
+        if newFirstName == True:
+            user.first_name = body['first_name']
+        if newLastName == True:
+            user.last_name = body['last_name']
+        if newPassword == True:
+            user.password = encodedPassword
         db.session.commit()
     except Exception as e:
         return {
-            "error": "internal server error"
+            "error": "Internal Server Error"
         }, 500
         raise
 
@@ -311,7 +331,7 @@ def updateProfile(token_claims):
     user = User.query.get(user.id)
     result = user_schema.dump(user)
     # remove the sensitive data fields
-    del result['password']
+    # del result['password']
     del result['access_token']
     del result['verification_token']
     # Return the user
