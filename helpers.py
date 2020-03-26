@@ -7,9 +7,9 @@ def sendVerificationEmail(mail, to, first_name, last_name, verification_token):
     # Create the callback URL
     callback = ''
     if app.config["ENV"] == 'development':
-        callback = os.getenv("DEV_ROOT_URL")
+        callback = os.getenv("DEV_BACKEND_URL")
     else:
-        callback = os.getenv("PROD_ROOT_URL")
+        callback = os.getenv("PROD_BACKEND_URL")
     callback = callback + 'verifyUser?email=' + to[0] + '&' + 'verification_token=' + verification_token
 
     try:
@@ -29,7 +29,7 @@ def sendApprovedEmail(mail, to, first_name, last_name):
     # Create the callback URL
     callback = ''
     if app.config["ENV"] == 'development':
-        callback = os.getenv("FRONTEND_URL")
+        callback = os.getenv("PROD_FRONTEND_URL")
     else:
         callback = os.getenv("DEV_FRONTEND_URL")
     callback = callback + 'login'
@@ -51,7 +51,7 @@ def forgotPasswordEmail(mail, to, first_name, last_name, reset_token):
     # Create the callback URL
     callback = ''
     if app.config["ENV"] == 'development':
-        callback = os.getenv("FRONTEND_URL")
+        callback = os.getenv("PROD_FRONTEND_URL")
     else:
         callback = os.getenv("DEV_FRONTEND_URL")
     callback = callback + 'resetPassword?email=' + to[0] + '&' + 'reset_token=' + reset_token

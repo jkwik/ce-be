@@ -377,7 +377,7 @@ def verifyUser():
     db.session.close()
 
     # Redirect to the frontend homepage
-    return redirect(os.getenv("FRONTEND_URL"), code=302)
+    return redirect(os.getenv("PROD_FRONTEND_URL"), code=302)
 
 @app.route("/auth/login", methods=["POST"])
 def login():
@@ -556,7 +556,7 @@ def resetPassword():
     db.session.close()
 
     # Redirect to the frontend homepage
-    login = os.getenv("FRONTEND_URL") + 'auth/login'
+    login = os.getenv("PROD_FRONTEND_URL") + 'auth/login'
     return redirect(login, code=302)
 
 # terminate client endpoint
