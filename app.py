@@ -306,7 +306,7 @@ def updateProfile(token_claims):
             return{
                 "error": "User must enter current password"
             }
-        # check that the currentPassword matches the current password in the database
+        # check that currentPassword matches the current password in the database
         if not bcrypt.check_password_hash(user.password, body['currentPassword'].encode(encoding='utf-8')):
             return {
                 "error": "Input password doesn't match current password"
@@ -539,15 +539,14 @@ def resetPassword():
             "error": "No email present in query parameter"
         }, 400
 
-    # Check that the verification_token belongs to the email
+    # Check that the reset_token belongs to the email
     user = User.query.filter_by(email=email, reset_token=resetToken).first()
     if user == None:
         return {
             "error": "Invalid reset_token or email"
         }, 404
 
-    # If it does, then we set the verified field to True and remove the verification_token
-    
+    # If it does, then we set the password field to the new password, and remove the reset_token
     user.reset_token = ''
     # Encrypt the password
     encodedPassword = bcrypt.generate_password_hash(password).decode(encoding="utf-8")
