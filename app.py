@@ -258,7 +258,7 @@ def clientList(token_claims):
         # close db connection
         db.session.close()
         return {
-            "approvedclients": approvedClients,
+            "approvedClients": approvedClients,
             "unapprovedClients": unapprovedClients,
             "pastClients": pastClients
         }
