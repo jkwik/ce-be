@@ -124,6 +124,7 @@ def signUp():
     user = User.query.get(user.id)
 
     # Generate a new access token
+    # encode own token and put it in session before calling the endpoint
     token = user.encode_auth_token({
         'id': user.id,
         'role': user.role
