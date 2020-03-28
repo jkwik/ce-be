@@ -596,3 +596,30 @@ def terminateClient(token_claims):
     return {
         "user": result
     }
+
+@app.route('/getUser', methods=['GET'])
+@http_guard(renew=True, nullable=False)
+def getUser(token_claims):
+    body = request.get_json(force=True)
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(body['id'])
+
+    # check that this user exits
+    if user == None:
+        return {
+            "error": "Invalid id"
+        }, 404
+    
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    db.session.close()
+    # Return the user
+    return {
+        "user": result
+    }
