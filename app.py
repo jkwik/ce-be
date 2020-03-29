@@ -112,6 +112,7 @@ def signUp():
             "error": "Duplicate Email"
         }, 409
     except Exception as e:
+        print(e)
         return {
             "error": "Internal Server Error"
         }, 500
