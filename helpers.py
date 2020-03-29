@@ -54,7 +54,7 @@ def forgotPasswordEmail(mail, to, first_name, last_name, reset_token):
         callback = os.getenv("PROD_FRONTEND_URL")
     else:
         callback = os.getenv("DEV_FRONTEND_URL")
-    callback = callback + 'resetPassword?email=' + to[0] + '&' + 'reset_token=' + reset_token
+    callback = callback + 'resetPassword?reset_token=' + reset_token
 
     try:
         msg = Message(

@@ -533,20 +533,15 @@ def resetPassword():
     body = request.get_json(force=True)
     # Grab the verification token from the query parameter
     resetToken = body['reset_token']
-    email = body['email']
     password = body['password']
 
     if resetToken == None:
         return {
             "error": "No reset_token present in query parameter"
         }, 400
-    if email == None:
-        return {
-            "error": "No email present in query parameter"
-        }, 400
 
     # Check that the reset_token belongs to the email
-    user = User.query.filter_by(email=email, reset_token=resetToken).first()
+    user = User.query.filter_by(reset_token=resetToken).first()
     if user == None:
         return {
             "error": "Invalid reset_token or email"
