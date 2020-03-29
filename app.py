@@ -602,11 +602,15 @@ def terminateClient(token_claims):
 @app.route('/getUser', methods=['GET'])
 @http_guard(renew=True, nullable=False)
 def getUser(token_claims):
-    body = request.get_json(force=True)
+    id = request.args.get('id')
+    if id == None:
+        return {
+            "error": "No id parameter found in request"
+        }, 404
 
     # retrieve user with id passed in
     user = User()
-    user = User.query.get(body['id'])
+    user = User.query.get(id)
 
     # check that this user exits
     if user == None:
