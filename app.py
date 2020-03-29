@@ -125,6 +125,7 @@ def signUp():
     user = User.query.get(user.id)
 
     # Generate a new access token
+    # encode own token and put it in session before calling the endpoint
     token = user.encode_auth_token({
         'id': user.id,
         'role': user.role
@@ -259,7 +260,7 @@ def clientList(token_claims):
         # close db connection
         db.session.close()
         return {
-            "approvedclients": approvedClients,
+            "approvedClients": approvedClients,
             "unapprovedClients": unapprovedClients,
             "pastClients": pastClients
         }
@@ -307,7 +308,7 @@ def updateProfile(token_claims):
             return{
                 "error": "User must enter current password"
             }
-        # check that the currentPassword matches the current password in the database
+        # check that currentPassword matches the current password in the database
         if not bcrypt.check_password_hash(user.password, body['currentPassword'].encode(encoding='utf-8')):
             return {
                 "error": "Input password doesn't match current password"
@@ -540,15 +541,14 @@ def resetPassword():
             "error": "No email present in query parameter"
         }, 400
 
-    # Check that the verification_token belongs to the email
+    # Check that the reset_token belongs to the email
     user = User.query.filter_by(email=email, reset_token=resetToken).first()
     if user == None:
         return {
             "error": "Invalid reset_token or email"
         }, 404
 
-    # If it does, then we set the verified field to True and remove the verification_token
-    
+    # If it does, then we set the password field to the new password, and remove the reset_token
     user.reset_token = ''
     # Encrypt the password
     encodedPassword = bcrypt.generate_password_hash(password).decode(encoding="utf-8")
@@ -587,6 +587,33 @@ def terminateClient(token_claims):
 
     # Grab the user from the database and dump the result into a user schema
     user = User.query.get(user.id)
+    result = user_schema.dump(user)
+    # remove the sensitive data fields
+    del result['password']
+    del result['access_token']
+    del result['verification_token']
+
+    db.session.close()
+    # Return the user
+    return {
+        "user": result
+    }
+
+@app.route('/getUser', methods=['GET'])
+@http_guard(renew=True, nullable=False)
+def getUser(token_claims):
+    body = request.get_json(force=True)
+
+    # retrieve user with id passed in
+    user = User()
+    user = User.query.get(body['id'])
+
+    # check that this user exits
+    if user == None:
+        return {
+            "error": "Invalid id"
+        }, 404
+    
     result = user_schema.dump(user)
     # remove the sensitive data fields
     del result['password']

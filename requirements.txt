@@ -13,3 +13,6 @@ flask-bcrypt
 pyjwt==1.4.2
 flask-session
 flask-mail
+pytest
+pytest-flask
+pytest-flask-sqlalchemy 
