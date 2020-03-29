@@ -486,11 +486,15 @@ def logout():
 
 @app.route("/forgotPassword", methods=["GET"])
 def forgotPassword():
-    body = request.get_json(force=True)
+    email = request.args.get('email')
+    if email == None:
+        return {
+            "error": "No email parameter found in request"
+        }, 404
     # validate email format
     try:
-        v = validate_email(body['email']) # validate and get info
-        body['email'] = v["email"] # replace with normalized form
+        v = validate_email(email) # validate and get info
+        email = v["email"] # replace with normalized form
     except EmailNotValidError as e:
         # email is not valid, return error code
         return {
@@ -499,7 +503,7 @@ def forgotPassword():
 
     # retrieve user with id passed in
     user = User()
-    user = User.query.filter_by(email=body['email']).first()
+    user = User.query.filter_by(email=email).first()
 
     if user == None:
         return {
@@ -512,7 +516,7 @@ def forgotPassword():
     db.session.commit()
 
     # send forgot password email to the user
-    err = forgotPasswordEmail(mail, [body['email']], user.first_name, user.last_name, str(resetToken))
+    err = forgotPasswordEmail(mail, [email], user.first_name, user.last_name, str(resetToken))
     if err != None:
         print(err)
         db.session.rollback()
