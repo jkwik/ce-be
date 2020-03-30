@@ -3,24 +3,126 @@ import tempfile
 import pytest
 import json
 import pdb
+import unittest
 from app import app, db
 from models import User, UserSchema, user_schema, Role
 
 
+# creates test client
 @pytest.fixture(scope='module')
 def client(request):
     test_client = app.test_client()
 
+    # remove newly created user after each test runs
     def teardown():
         user = User()
         User.query.filter(User.email == 'test@gmail.com').delete()
+        User.query.filter(User.email == 'coach@gmail.com').delete()
         db.session.commit()
-
 
     request.addfinalizer(teardown)
     return test_client
 
-def create_new_user():
+def test_health(client):
+    rv = client.get('/health')
+    assert rv.json == {'success': True}
+
+def test_signup(client):
+    # add flask mail testing somehow with mocking
+    new_user = create_new_user()
+    rv = sign_up_user_for_testing(client, new_user)
+    # deleting id of user because I was not able to pull it from the database
+    # I tried db.session.refresh(new_user), but was getting errors
+    # we probably don't care about the id of the user anyways
+    del rv.json['user']['id'] 
+    assert rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
+
+def test_approve_client(client):
+    assert True
+
+def test_client_list(client):
+    new_coach = create_new_coach()
+    signup_rv = sign_up_user_for_testing(client, new_coach)
+    login_rv = login_user_for_testing(client, new_coach)
+    client_list_rv = client.get("/clientList")
+
+    # these would need to be populate with all of the
+    # approved/unapproved/past clients in our database
+    # so for now we are going to test if the response
+    # simply gives us data back
+    approvedClients = []
+    unapprovedClients = []
+    pastClients = []
+    expected_json_response = {
+            "approvedClients": approvedClients,
+            "unapprovedClients": unapprovedClients,
+            "pastClients": pastClients
+        }
+    
+    assert client_list_rv.json != None
+
+def test_update_profile(client):
+    assert True
+
+def test_verify_user(client):
+    assert True
+
+def test_login(client):
+    # have to create new user since changes to database are reverted after every test
+    new_user = create_new_user()
+    signup_rv = sign_up_user_for_testing(client, new_user)
+    login_rv = login_user_for_testing(client, new_user)
+
+    del login_rv.json['user']['id']
+    assert login_rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
+
+def test_logout(client):
+    new_user = create_new_user()
+    signup_rv = sign_up_user_for_testing(client, new_user)
+    login_rv = login_user_for_testing(client, new_user)
+    logout_rv = client.get("auth/logout")
+    assert logout_rv.json == {'success': True}
+
+def test_forgot_password(client):
+    assert True
+
+def test_reset_password(client):
+    assert True
+
+def test_terminate_client(client):
+    new_coach = create_new_coach()
+    new_user = create_new_user(True, True)
+    user_id = get_user_id()
+    new_user_data = user_schema.dump(new_user)
+    coach_signup_rv = sign_up_user_for_testing(client, new_coach)
+    coach_login_rv = login_user_for_testing(client, new_coach)
+    coach_signup_rv = sign_up_user_for_testing(client, new_user)
+    coach_login_rv = login_user_for_testing(client, new_user)
+  
+    mimetype = 'application/json'
+    headers = {
+        'Content-Type': mimetype,
+        'Accept': mimetype
+    }
+
+    data = {
+        'id': user_id
+    }
+    # I'm not sure what the correct request format is.
+    # The endpoint documentation shows that only the client 
+    # id is required 
+    #terminate_client_rv = client.put("/terminateClient", data=json.dumps(data), headers=headers)
+    #assert terminate_client_rv == { "user" : {"approved" : False} }
+    assert True
+    
+def test_get_user(client):
+    assert True
+
+"""
+Creating helper methods that tests will reuse to make tests
+look cleaner.
+"""
+def create_new_user(approved=False, verified=False):
     body = {
         'first_name': 'test_first',
         'last_name': 'test_last',
@@ -31,81 +133,32 @@ def create_new_user():
     user = User(
         first_name=body['first_name'], last_name=body['last_name'],
         email=body['email'], password=body['password'],
+        approved=approved, role=body['role'],
+        verified=verified
+    )  
+    # db.session.add(user) 
+    # db.session.commit() 
+    return user
+
+def create_new_coach():
+    body = {
+    'first_name': 'coach_first',
+    'last_name': 'coach_last',
+    'email': 'coach@gmail.com',
+    'password': 'password',
+    'role': 'COACH'
+    }
+    user = User(
+        first_name=body['first_name'], last_name=body['last_name'],
+        email=body['email'], password=body['password'],
         approved=False, role=body['role'],
         verified=False
     )    
     return user
 
-def test_health(client):
-    rv = client.get('/health')
-    assert rv.json == {'success': True}
-
-def test_signup(client):
-    # add flask mail testing somehow with mocking
-
-    new_user, rv = sign_up_user_for_testing(client)
-
-    # deleting id of user because I was not able to pull it from the database
-    # I tried db.session.refresh(new_user), but was getting errors
-    del rv.json['user']['id'] 
-    assert rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
-
-def test_approve_client(client):
-    assert True
-
-def test_client_list(client):
-    assert True
-
-def test_update_profile(client):
-    assert True
-
-def test_verify_user(client):
-    assert True
-
-def test_login(client):
-    # have to create new user since changes to database are reverted after every test
-    new_user, signup_rv = sign_up_user_for_testing(client)
-    mimetype = 'application/json'
-    headers = {
-        'Content-Type': mimetype,
-        'Accept': mimetype
-    }
-    data = {
-        'first_name': new_user.first_name,
-        'last_name': new_user.last_name,
-        'email': new_user.email,
-        'password': new_user.password,
-        'approved': new_user.approved,
-        'check_in': new_user.check_in,
-        'coach_id': new_user.coach_id,
-        'access_token': new_user.access_token,
-        'role': new_user.role,
-        'verification_token': new_user.verification_token,
-        'verified': new_user.verified,
-        'reset_token': new_user.reset_token 
-    }
-
-    login_rv = client.post("/auth/login", data=json.dumps(data), headers=headers)
-
-    assert True
-
-def test_logout(client):
-    assert True
-
-def test_forgot_password(client):
-    assert True
-
-def test_reset_password(client):
-    assert True
-
-def test_terminate_client(client):
-    assert True
-
-
 # helper method to sign up a new user since almost every test method
 # will have to do this
-def sign_up_user_for_testing(client):
-    new_user = create_new_user()
+def sign_up_user_for_testing(client, new_user):
     mimetype = 'application/json'
     headers = {
         'Content-Type': mimetype,
@@ -131,5 +184,41 @@ def sign_up_user_for_testing(client):
     del result['verification_token']
     url = '/signUp'
     rv = client.post(url, data=json.dumps(data), headers=headers)
-    return new_user, rv
+    return rv
 # test http guard 
+
+def login_user_for_testing(client, new_user):
+    mimetype = 'application/json'
+    headers = {
+        'Content-Type': mimetype,
+        'Accept': mimetype
+    }
+    data = {
+        'first_name': new_user.first_name,
+        'last_name': new_user.last_name,
+        'email': new_user.email,
+        'password': new_user.password,
+        'approved': new_user.approved,
+        'check_in': new_user.check_in,
+        'coach_id': new_user.coach_id,
+        'access_token': new_user.access_token,
+        'role': new_user.role,
+        'verification_token': new_user.verification_token,
+        'verified': new_user.verified,
+        'reset_token': new_user.reset_token 
+    }
+    login_rv = client.post("/auth/login", data=json.dumps(data), headers=headers)
+
+    return login_rv
+
+# a method to get the current user id
+# there is probably a better way to do this 
+# but this is the only way I could make it work
+def get_user_id():
+    user = User()
+    users = User.query.filter(User.email == 'test@gmail.com').all()
+    user_id = None
+    for user in users:
+        user_id = user.id
+    
+    return user_id
