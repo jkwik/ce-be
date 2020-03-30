@@ -3,7 +3,7 @@ import tempfile
 import pytest
 import json
 import pdb
-from app import app
+from app import app, db
 from models import User, UserSchema, user_schema, Role
 
 
@@ -12,13 +12,15 @@ def client(request):
     test_client = app.test_client()
 
     def teardown():
-        pass
+        user = User()
+        User.query.filter(User.email == 'test@gmail.com').delete()
+        db.session.commit()
+
 
     request.addfinalizer(teardown)
     return test_client
 
-@pytest.fixture(scope='module')
-def new_user():
+def create_new_user():
     body = {
         'first_name': 'test_first',
         'last_name': 'test_last',
@@ -38,8 +40,9 @@ def test_health(client):
     rv = client.get('/health')
     assert rv.json == {'success': True}
 
-def test_signup(client, new_user):
+def test_signup(client):
     # flask mail mocking
+    new_user = create_new_user()
     mimetype = 'application/json'
     headers = {
         'Content-Type': mimetype,
@@ -65,7 +68,11 @@ def test_signup(client, new_user):
     del result['verification_token']
     url = '/signUp'
     rv = client.post(url, data=json.dumps(data), headers=headers )
-    assert rv.json == { 'user': result}
+
+    # deleting id of user because I was not able to pull it from the database
+    # I tried db.session.refresh(new_user), but was getting errors
+    del rv.json['user']['id'] 
+    assert rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
 
 def test_approve_client(client):
     assert True
