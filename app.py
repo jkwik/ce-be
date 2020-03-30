@@ -273,7 +273,6 @@ def clientList(token_claims):
 @app.route('/updateProfile', methods=['PUT'])
 @http_guard(renew=True, nullable=False)
 def updateProfile(token_claims):
-    # email = request.args.get('email')
     body = request.get_json(force=True)
      # retrieve user with id passed in
     user = User()
@@ -304,14 +303,14 @@ def updateProfile(token_claims):
     
     if 'newPassword' in body:
         # check that the current password field was entered
-        if 'currentPassword' not in body:
+        if 'oldPassword' not in body:
             return{
-                "error": "User must enter current password"
+                "error": "User must enter old password"
             }
-        # check that currentPassword matches the current password in the database
-        if not bcrypt.check_password_hash(user.password, body['currentPassword'].encode(encoding='utf-8')):
+        # check that oldPassword matches the password in the database
+        if not bcrypt.check_password_hash(user.password, body['oldPassword'].encode(encoding='utf-8')):
             return {
-                "error": "Input password doesn't match current password"
+                "error": "The old password doesn't match the password in the database"
             }, 400
         newPassword = True
         encodedPassword = bcrypt.generate_password_hash(body['newPassword']).decode(encoding="utf-8")
