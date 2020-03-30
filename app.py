@@ -600,6 +600,12 @@ def terminateClient(token_claims):
 @app.route('/getUser', methods=['GET'])
 @http_guard(renew=True, nullable=False)
 def getUser(token_claims):
+    # check the role of the requestee
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
     id = request.args.get('id')
     if id == None:
         return {
