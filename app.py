@@ -628,3 +628,26 @@ def getUser(token_claims):
     return {
         "user": result
     }
+
+@app.route('/user', methods=['DELETE'])
+@http_guard(renew=True, nullable=False)
+def deleteUser(token_claims):
+    id = request.args.get('id')
+    if id == None:
+        return {
+            "error": "No id paramter found in request query"
+        }, 400
+
+    user = User.query.get(id)
+    if user == None:
+        return {
+            "error": "No user found with passed id"
+        }, 404
+
+    # Delete the user
+    db.session.delete(user)
+    db.session.commit()
+
+    return {
+        "success": True
+    }
