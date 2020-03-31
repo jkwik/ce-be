@@ -28,6 +28,7 @@ def http_guard(renew=True, nullable=False):
             # If it is empty, or it doesn't exist, this means user is not logged in. Return unauthorized
             # if nullable is False
             if (token == None or token == "") and nullable == False:
+                print("No token present in request")
                 return {
                     "error": "Unauthorized. User is not logged in"
                 }, 401
@@ -36,6 +37,7 @@ def http_guard(renew=True, nullable=False):
             # if nullable is False
             user = User.query.filter_by(access_token=token).first()
             if user == None:
+                print("User with email: ", user.email, " has expired access token")
                 return {
                     "error": "Unauthorized. Invalid access token"
                 }, 401
