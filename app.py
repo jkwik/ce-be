@@ -555,8 +555,9 @@ def resetPassword():
     db.session.close()
 
     # Redirect to the frontend homepage
-    login = os.getenv("PROD_FRONTEND_URL") + 'auth/login'
-    return redirect(login, code=302)
+    return {
+        "success": True
+    }
 
 # terminate client endpoint
 @app.route("/terminateClient", methods=["PUT"])
