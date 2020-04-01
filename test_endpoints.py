@@ -30,6 +30,7 @@ def test_health(client):
 def test_signup(client):
     # add flask mail testing somehow with mocking
     new_user = create_new_user()
+    #pdb.set_trace()
     rv = sign_up_user_for_testing(client, new_user)
     # deleting id of user because I was not able to pull it from the database
     # I tried db.session.refresh(new_user), but was getting errors
@@ -96,27 +97,20 @@ def test_terminate_client(client):
     new_user_data = user_schema.dump(new_user)
     coach_signup_rv = sign_up_user_for_testing(client, new_coach)
     coach_login_rv = login_user_for_testing(client, new_coach)
-    coach_signup_rv = sign_up_user_for_testing(client, new_user)
-    coach_login_rv = login_user_for_testing(client, new_user)
-  
-    mimetype = 'application/json'
-    headers = {
-        'Content-Type': mimetype,
-        'Accept': mimetype
-    }
+    client_signup_rv = sign_up_user_for_testing(client, new_user)
 
-    data = {
-        'id': user_id
-    }
-    # I'm not sure what the correct request format is.
-    # The endpoint documentation shows that only the client 
-    # id is required 
-    #terminate_client_rv = client.put("/terminateClient", data=json.dumps(data), headers=headers)
-    #assert terminate_client_rv == { "user" : {"approved" : False} }
+    # url = "/terminateClient?id={}".format(user_id)
+    # terminate_client_rv = client.put(url)
     assert True
-    
+
 def test_get_user(client):
-    assert True
+    new_user = create_new_user()
+    signup_rv = sign_up_user_for_testing(client, new_user)
+    user_id = get_user_id()
+    url = '/getUser?id={}'.format(user_id)
+    get_user_rv = client.get(url)
+    expected_json = {'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'id': user_id, 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False}}
+    assert get_user_rv.json == expected_json
 
 """
 Creating helper methods that tests will reuse to make tests
@@ -136,8 +130,6 @@ def create_new_user(approved=False, verified=False):
         approved=approved, role=body['role'],
         verified=verified
     )  
-    # db.session.add(user) 
-    # db.session.commit() 
     return user
 
 def create_new_coach():
