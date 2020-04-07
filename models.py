@@ -72,4 +72,5 @@ user_schemas = UserSchema(many=True)
 class Role(Enum):
     COACH = 'COACH'
     CLIENT = 'CLIENT'
+    
 
