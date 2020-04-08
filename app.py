@@ -49,7 +49,7 @@ mail = Mail(app)
 # session = Session(app)
 # session.app.session_interface.db.create_all()
 
-from models import User, user_schema, Role, user_schemas
+from models import User, user_schema, Role, user_schemas, CoachSession, coach_session_schema, coach_session_schemas, CoachTemplate, coach_template_schema, coach_template_schemas, CoachExercise, coach_exercise_schema, coach_exercise_schemas, Exercise, exercise_schema, exercise_schemas, ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, client_session_schemas, ClientExercise, client_exercise_schema, client_exercise_schemas, CheckIn, check_in_schema, check_in_schemas, TrainingEntry, training_entry_schema, training_entry_schemas 
 from helpers import sendVerificationEmail, sendApprovedEmail, forgotPasswordEmail
 from middleware import http_guard
 
@@ -656,4 +656,132 @@ def deleteUser(token_claims):
 
     return {
         "success": True
+    }
+
+
+
+# Iteration 2 -- RELATIONSHIP TESTS
+
+
+# 1: Coach_templates and Coach_sessions (WORKS)
+# Coach_templates test
+@app.route("/coachTemplate", methods=['GET'])
+def coachTemplate():
+    # retrieve template belonging to session
+    coach_session = CoachSession()
+    coach_session = CoachSession.query.first()
+    # uses the backref argument "coach_template"
+    template = coach_session.coach_template
+
+    if template == None:
+        return {
+             "error": "Invalid template id"
+         }, 404
+
+    result = coach_template_schema.dump(template)
+
+    return {
+         "template": result
+    }
+
+# Coach_sessions test (DOES NOT WORK  COMPLETELY)
+@app.route("/coachSession", methods=['GET'])
+def coachSession():
+    # retrieve sessions belonging to the template with the passed in template id
+    coach_template = CoachTemplate()
+    coach_template = CoachTemplate.query.filter_by(id='1').first()
+    # retrieve using foreign key "coach_sessions"
+    sessions = coach_template.coach_sessions
+    
+    if sessions == None:
+        return {
+            "error": "Invalid session id"
+        }, 404
+
+    result = coach_session_schemas.dump(sessions)
+   
+    return {
+        "coach sessions": result
+    }
+
+# 2: Coach_exercises and Exercises (WORKS)
+# Exercises test
+@app.route("/exercise", methods=['GET'])
+def exercise():
+    # retrieve the corresponding exercise belonging to the given coach_exercise
+    coach_exercise = CoachExercise()
+    coach_exercise = CoachExercise.query.first()
+    # uses the backref argument "exercise"
+    exercise = coach_exercise.exercise
+
+    if exercise == None:
+        return {
+             "error": "Invalid template id"
+         }, 404
+
+    result = exercise_schema.dump(exercise)
+
+    return {
+         "exercise": result
+    }
+
+# Coach_exercises test (DOES NOT WORK  COMPLETELY)
+@app.route("/coachExercise", methods=['GET'])
+def coachExercise():
+    # retrieve coach_exercise belonging to the exercise with the passed in exercise id
+    exercise = Exercise()
+    exercise = Exercise.query.filter_by(id='1').first()
+    # retrieve using foreign key "coach_exercises"
+    coach_exercise = exercise.coach_exercises
+    
+    if coach_exercise == None:
+        return {
+            "error": "Invalid session id"
+        }, 404
+
+    result = coach_exercise_schema.dump(coach_exercise)
+   
+    return {
+        "coach_exercise": result
+    }
+
+# 3: Coach_sessions and Coach_exercises
+# Coach_sessions to coach_exercises (DOES NOT WORK  COMPLETELY)
+@app.route("/cs_to_ce", methods=['GET'])
+def cs_to_ce():
+    # retrieve coach_session belonging to coach_exercise
+    coach_exercise = CoachExercise()
+    coach_exercise = CoachExercise.query.first()
+    # uses the backref argument "coach_session"
+    coach_session = coach_exercise.coach_session
+
+    if coach_session== None:
+        return {
+             "error": "Invalid template id"
+         }, 404
+
+    result = coach_session_schema.dump(coach_session)
+
+    return {
+         "coach_session": result
+    }
+
+# Coach_exercises to coach_sessions (DOES NOT WORK  COMPLETELY)
+@app.route("/ce_to_cs", methods=['GET'])
+def ce_to_cs():
+    # retrieve exercises belonging to the session with the passed in session id
+    coach_session = CoachSession()
+    coach_session = CoachSession.query.filter_by(id='1').first()
+    # retrieve using foreign key "coach_exercises"
+    exercises = coach_session.coach_exercises
+    
+    if exercises == None:
+        return {
+            "error": "Invalid session id"
+        }, 404
+
+    result = coach_exercise_schemas.dump(exercises)
+   
+    return {
+        "Coach_exercises ": result
     }
