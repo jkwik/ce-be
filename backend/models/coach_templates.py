@@ -11,7 +11,7 @@ class CoachTemplate(db.Model):
 
 class CoachTemplateSchema(ma.Schema):
     class Meta:
-        fields = ('id', name)
+        fields = ('id', 'name')
 
 coach_template_schema = CoachTemplateSchema()
 coach_template_schemas = CoachTemplateSchema(many=True)
