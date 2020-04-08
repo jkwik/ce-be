@@ -7,6 +7,7 @@ from flask_bcrypt import Bcrypt
 from flask_mail import Mail
 import os
 import datetime
+from flask_marshmallow import Marshmallow
 
 # This initialization file serves to initialize all variables that will be used throughout the application
 
@@ -48,7 +49,11 @@ mail = Mail(app)
 # session = Session(app)
 # session.app.session_interface.db.create_all()
 
+# Initialize marshmallow for schema parsing
+ma = Marshmallow(app)
+
 # Here, we import all the different modules
 import backend.health
 import backend.auth
 import backend.user
+import backend.coach_templates

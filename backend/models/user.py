@@ -1,11 +1,14 @@
-from backend import db, app
-from flask_marshmallow import Marshmallow
+from backend import db, app, ma
 from enum import Enum
 import jwt
 import datetime
+from backend.models.client_templates import ClientTemplate
 
-ma = Marshmallow(app)
+class Role(Enum):
+    COACH = 'COACH'
+    CLIENT = 'CLIENT'
 
+# Users table
 class User(db.Model):
     __tablename__ = "users"
 
@@ -22,6 +25,9 @@ class User(db.Model):
     verification_token = db.Column(db.String, nullable=True)
     verified = db.Column(db.Boolean, nullable=False)
     reset_token = db.Column(db.String, nullable=True)
+
+    # 1 to many relationship with Client_templates
+    client_template = db.relationship('ClientTemplate', cascade="all, delete-orphan", lazy='dynamic')
 
     def encode_auth_token(self, sub):
         """
@@ -62,14 +68,5 @@ class UserSchema(ma.Schema):
     class Meta:
         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token', 'verified', 'reset_token')
 
-# class UserSchemas(ma.Schema):
-#     class Meta:
-#         fields = ('id', 'first_name', 'last_name', 'email', 'password', 'approved', 'check_in', 'coach_id', 'access_token', 'role', 'verification_token')
-
 user_schema = UserSchema()
 user_schemas = UserSchema(many=True)
-
-class Role(Enum):
-    COACH = 'COACH'
-    CLIENT = 'CLIENT'
-
