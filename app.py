@@ -662,28 +662,6 @@ def deleteUser(token_claims):
 
 # Iteration 2 -- RELATIONSHIP TESTS
 
-
-# # 1: Coach_templates and Coach_sessions (WORKS)
-# # Coach_templates test
-# @app.route("/coachTemplate", methods=['GET'])
-# def coachTemplate():
-#     # retrieve template belonging to session
-#     coach_session = CoachSession()
-#     coach_session = CoachSession.query.first()
-#     # uses the backref argument "coach_template"
-#     template = coach_session.coach_template
-
-#     if template == None:
-#         return {
-#              "error": "Invalid template id"
-#          }, 404
-
-#     result = coach_template_schema.dump(template)
-
-#     return {
-#          "template": result
-#     }
-
 # Coach_sessions test (DOES NOT WORK  COMPLETELY)
 @app.route("/coachSession", methods=['GET'])
 def coachSession():
@@ -704,26 +682,6 @@ def coachSession():
         "coach sessions": result
     }
 
-# # 2: Coach_exercises and Exercises (WORKS)
-# # Exercises test
-# @app.route("/exercise", methods=['GET'])
-# def exercise():
-#     # retrieve the corresponding exercise belonging to the given coach_exercise
-#     coach_exercise = CoachExercise()
-#     coach_exercise = CoachExercise.query.first()
-#     # uses the backref argument "exercise"
-#     exercise = coach_exercise.exercise_c_e
-
-#     if exercise == None:
-#         return {
-#              "error": "Invalid template id"
-#          }, 404
-
-#     result = exercise_schema.dump(exercise)
-
-#     return {
-#          "exercise": result
-#     }
 
 # Coach_exercises test (DOES NOT WORK  COMPLETELY)
 @app.route("/coachExercise", methods=['GET'])
@@ -744,27 +702,6 @@ def coachExercise():
     return {
         "coach_exercise": result
     }
-
-# # 3: Coach_sessions and Coach_exercises
-# # Coach_sessions to coach_exercises (DOES NOT WORK  COMPLETELY)
-# @app.route("/cs_to_ce", methods=['GET'])
-# def cs_to_ce():
-#     # retrieve coach_session belonging to coach_exercise
-#     coach_exercise = CoachExercise()
-#     coach_exercise = CoachExercise.query.first()
-#     # uses the backref argument "coach_session"
-#     coach_session = coach_exercise.coach_session
-
-#     if coach_session== None:
-#         return {
-#              "error": "Invalid template id"
-#          }, 404
-
-#     result = coach_session_schema.dump(coach_session)
-
-#     return {
-#          "coach_session": result
-#     }
 
 # Coach_exercises to coach_sessions (DOES NOT WORK  COMPLETELY)
 @app.route("/ce_to_cs", methods=['GET'])
