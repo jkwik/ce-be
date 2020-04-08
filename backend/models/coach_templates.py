@@ -5,12 +5,13 @@ class CoachTemplate(db.Model):
     __tablename__ = "Coach_templates"
 
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, primary_key=True)
     # 1 to many relationship with Coach_sessions table
     coach_sessions = db.relationship('CoachSession', cascade="all, delete-orphan", lazy='dynamic')
 
 class CoachTemplateSchema(ma.Schema):
     class Meta:
-        fields = ('id',)
+        fields = ('id', name)
 
 coach_template_schema = CoachTemplateSchema()
 coach_template_schemas = CoachTemplateSchema(many=True)
