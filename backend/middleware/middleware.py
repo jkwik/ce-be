@@ -1,7 +1,7 @@
 from flask import session
 from functools import wraps
-from models import User
-from app import db
+from backend.models.user import User
+from backend import db
 
 def http_guard(renew=True, nullable=False):
     """Checks for the presence and validity of the access token. It also handles renewing the access_token
