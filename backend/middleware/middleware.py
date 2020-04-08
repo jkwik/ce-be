@@ -37,7 +37,6 @@ def http_guard(renew=True, nullable=False):
             # if nullable is False
             user = User.query.filter_by(access_token=token).first()
             if user == None:
-                print("User with email: ", user.email, " has expired access token")
                 return {
                     "error": "Unauthorized. Invalid access token"
                 }, 401
