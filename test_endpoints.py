@@ -4,8 +4,8 @@ import pytest
 import json
 import pdb
 import unittest
-from app import app, db
-from models import User, UserSchema, user_schema, Role
+from backend import app, db
+from backend.models.user import User, UserSchema, user_schema, Role
 
 
 # creates test client

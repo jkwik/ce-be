@@ -1,4 +1,4 @@
-from app import db, app
+from backend import db, app
 from flask_marshmallow import Marshmallow
 from enum import Enum
 import jwt

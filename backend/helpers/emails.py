@@ -1,6 +1,6 @@
 from flask_mail import Mail, Message
 from flask import render_template
-from app import app
+from backend import app
 import os
 
 def sendVerificationEmail(mail, to, first_name, last_name, verification_token):
@@ -63,7 +63,7 @@ def forgotPasswordEmail(mail, to, first_name, last_name, reset_token):
             recipients=to
         )
         msg.body = 'Hello ' + first_name + ' ' + last_name + ',\n' + "Reset password by clicking the button below.\n" + callback
-        msg.html = render_template("forgotPassword.html", name=first_name+' '+last_name, callback=callback)
+        msg.html = render_template('forgotPassword.html', name=first_name+' '+last_name, callback=callback)
         mail.send(msg)
         return None
     except Exception as e:
