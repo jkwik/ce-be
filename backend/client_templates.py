@@ -1,8 +1,28 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
-from backend.models.client_templates import ClientTemplate, client_template_schema, ClientSession, client_session_schema
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
+
+@app.route("/client/templates", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCoachTemplates(token_claims):
+    user_id = request.args.get('user_id')
+    if user_id == None:
+        return {
+            "error": "No query parameter user_id found in request"
+        }, 400
+
+    templates = db.session.query(
+        ClientTemplate.id, ClientTemplate.name, ClientTemplate.start_date, ClientTemplate.end_date,
+        ClientTemplate.user_id, ClientTemplate.completed
+    ).filter(ClientTemplate.user_id == user_id)
+
+    result = client_template_schemas.dump(templates)
+
+    return {
+        "templates": result
+    }
 
 @app.route("/client/template", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -18,7 +38,9 @@ def getCoachTemplate(token_claims):
 
     templateResult = client_template_schema.dump(template)
 
-    return templateResult
+    return {
+        "template": templateResult
+    }
 
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -43,4 +65,6 @@ def getCoachSession(token_claims):
 
     sessionResult = client_session_schema.dump(session)
 
-    return sessionResult
+    return {
+        "session": sessionResult
+    }
