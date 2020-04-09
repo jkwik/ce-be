@@ -4,7 +4,7 @@ from flask import request, session
 from sqlalchemy.exc import IntegrityError
 # from sqlalchemy.orm import defer, joinedload, load_only, subqueryload
 from backend.models.user import Role
-from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, Exercise
+from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schema
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -42,6 +42,11 @@ def coachTemplate(token_claims):
 
     id = request.args.get('coach_template_id')
     
+    if id == None:
+        return {
+            "error": "No query parameter id found in request"
+        }, 400
+    
     template = CoachTemplate.query.filter_by(id=id).first()
 
     if template == None:
@@ -71,7 +76,6 @@ def coachSession(token_claims):
         }, 400
     
     session = CoachSession.query.filter_by(id=id).first()
-    # exercises = CoachExercise.query.join(Exercise, CoachExercise.exercise_id==Exercise.id)
 
     if session == None:
         return {
@@ -95,6 +99,11 @@ def coachExercise(token_claims):
 
     id = request.args.get('coach_exercise_id')
 
+    if id == None:
+        return {
+            "error": "No query parameter id found in request"
+        }, 400
+    
     exercise = CoachExercise.query.filter_by(id=id).first()
 
     if exercise == None:
@@ -107,23 +116,30 @@ def coachExercise(token_claims):
     return result
 
 
+# Return the exercise from the exercise_id passed in
+@app.route("/exercise", methods=['GET'])
+@http_guard(renew=True, nullable=False)
+def exercise(token_claims):
+    # check that the user's role is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
 
-# # Coach_exercises to coach_sessions (DOES NOT WORK  COMPLETELY)
-# @app.route("/ce_to_cs", methods=['GET'])
-# def ce_to_cs():
-#     # retrieve exercises belonging to the session with the passed in session id
-#     coach_session = CoachSession()
-#     coach_session = CoachSession.query.filter_by(id='1').first()
-#     # retrieve using foreign key "coach_exercises"
-#     exercises = coach_session.coach_exercises
+    id = request.args.get('exercise_id')
 
-#     if exercises == None:
-#         return {
-#             "error": "Invalid session id"
-#         }, 404
+    if id == None:
+        return {
+            "error": "No query parameter id found in request"
+        }, 400
+    
+    exercise = Exercise.query.filter_by(id=id).first()
 
-#     result = coach_exercise_schemas.dump(exercises)
+    if exercise == None:
+        return {
+            "error": "Exercise not found with given id: " + id
+        }, 404
 
-#     return {
-#         "Coach_exercises ": result
-#     }
+    result = exercise_schema.dump(exercise)
+
+    return result
