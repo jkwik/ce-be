@@ -72,6 +72,11 @@ class ClientSessionSchema(ma.Schema):
 client_session_schema = ClientSessionSchema()
 client_session_schemas = ClientSessionSchema(many=True)
 
+# This schema is used to for the templates to pull partial information about sessions
+class PartialClientSessionSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'order', 'completed')
+
 # Client_templates Table
 class ClientTemplate(db.Model):
     __tablename__ = "Client_templates"
@@ -90,7 +95,7 @@ class ClientTemplate(db.Model):
 
 
 class ClientTemplateSchema(ma.Schema):
-    sessions = ma.Nested(ClientSessionSchema, many=True)
+    sessions = ma.Nested(PartialClientSessionSchema, many=True)
     class Meta:
         fields = ('id', 'name', 'start_date', 'end_date', 'user_id', 'completed', 'sessions')
 
