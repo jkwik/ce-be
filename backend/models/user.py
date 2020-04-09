@@ -27,7 +27,7 @@ class User(db.Model):
     reset_token = db.Column(db.String, nullable=True)
 
     # 1 to many relationship with Client_templates
-    client_template = db.relationship('ClientTemplate', cascade="all, delete-orphan", lazy='dynamic')
+    client_templates = db.relationship('ClientTemplate', cascade="all, delete-orphan", lazy='dynamic')
 
     def encode_auth_token(self, sub):
         """
