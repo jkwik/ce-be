@@ -6,6 +6,7 @@ class ClientTemplate(db.Model):
     __tablename__ = "Client_templates"
 
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False)
     start_date = db.Column(db.String, nullable=False)
     end_date = db.Column(db.String, nullable=True)
     checkins = db.Column(db.String, nullable=False)
@@ -20,7 +21,7 @@ class ClientTemplate(db.Model):
 
 class ClientTemplateSchema(ma.Schema):
     class Meta:
-        fields = ('id','start_date', 'end_date', 'checkins', 'user_id', 'completed')
+        fields = ('id', 'name', 'start_date', 'end_date', 'checkins', 'user_id', 'completed')
 
 client_template_schema = ClientTemplateSchema()
 client_template_schemas = ClientTemplateSchema(many=True)
@@ -35,6 +36,7 @@ class ClientSession(db.Model):
     comment = db.Column(db.String, nullable=False)
     name = db.Column(db.String, nullable=False)
     order = db.Column(db.Integer, nullable=False)
+    completed = db.Column(db.Boolean, nullable=False)
     # many to one relationship with CLient_templates table
     client_template_id = db.Column(db.Integer, db.ForeignKey('Client_templates.id'), nullable=False)
     # one to many relationship with Client_exercises table
@@ -44,12 +46,10 @@ class ClientSession(db.Model):
 
 class ClientSessionSchema(ma.Schema):
     class Meta:
-        fields = ('id','client_weight', 'comment', 'name', 'order', 'client_template_id')
+        fields = ('id','client_weight', 'comment', 'name', 'order', 'completed', 'client_template_id')
 
 client_session_schema = ClientSessionSchema()
 client_session_schemas = ClientSessionSchema(many=True)
-
-
 
 # Client_exercises Table
 class ClientExercise(db.Model):
@@ -73,8 +73,6 @@ class ClientExerciseSchema(ma.Schema):
 client_exercise_schema = ClientExerciseSchema()
 client_exercise_schemas = ClientExerciseSchema(many=True)
 
-
-
 # Training_entries table
 class TrainingEntry(db.Model):
     __tablename__ = "Training_entries"
@@ -83,15 +81,17 @@ class TrainingEntry(db.Model):
     # many to one relationship with CLient_templates table
     client_session_id = db.Column(db.Integer, db.ForeignKey('Client_sessions.id'), nullable=False)
     # one to one relationship with Exercises table
-    exercise_id = db.Column(db.Integer, db.ForeignKey('Exercises.id'), nullable=False)
+    name = db.Column(db.String, nullable=False)
+    category = db.Column(db.String, nullable=False)
     sets = db.Column(db.Integer, nullable=False)
     reps = db.Column(db.Integer, nullable=False)
-    weight =db.Column(db.Integer, nullable=False)
+    weight = db.Column(db.Integer, nullable=False)
+    order = db.Column(db.Integer, nullable=False)
 
 
 class TrainingEntrySchema(ma.Schema):
     class Meta:
-        fields = ('id', 'client_session_id', 'exercise_id' 'sets', 'reps', 'weight')
+        fields = ('id', 'client_session_id', 'name', 'category', 'sets', 'reps', 'weight', 'order')
 
 training_entry_schema = TrainingEntrySchema()
 training_entry_schemas = TrainingEntrySchema(many=True)
