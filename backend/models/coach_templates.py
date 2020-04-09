@@ -1,5 +1,4 @@
 from backend import db, app, ma
-from marshmallow import fields
 
 # Exercises table
 class Exercise(db.Model):
@@ -28,14 +27,15 @@ class CoachExercise(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # 1 to 1 relationship with Exercises
     exercise_id = db.Column(db.Integer, db.ForeignKey('Exercises.id'), nullable=False)
-    exercise = db.relationship('Exercise', cascade="all, delete-orphan", lazy=True, uselist=False, single_parent=True, primaryjoin="Exercise.id==CoachExercise.exercise_id")
+    category = db.relationship(Exercise, cascade="all, delete-orphan", lazy=True, uselist=False, single_parent=True, primaryjoin="Exercise.id==CoachExercise.exercise_id")
+    name = db.relationship(Exercise, cascade="all, delete-orphan", lazy=True, uselist=False, single_parent=True, primaryjoin="Exercise.id==CoachExercise.exercise_id")
     # many to 1 relationship with Coach_sessions table
     coach_session_id = db.Column(db.Integer, db.ForeignKey('Coach_sessions.id'), nullable=False)
     order = db.Column(db.Integer, nullable=False)  
 
 class CoachExerciseSchema(ma.Schema):
-    category = fields.Pluck(ExerciseSchema, 'category')
-    name = fields.Pluck(ExerciseSchema, 'name')
+    category = ma.Pluck('ExerciseSchema', 'category', many=False)
+    name = ma.Pluck('ExerciseSchema', 'name', many=False)
     class Meta:
         fields = ('id', 'exercise_id', 'coach_session_id', 'order', 'category', 'name')
 

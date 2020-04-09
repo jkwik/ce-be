@@ -65,6 +65,10 @@ def coachSession(token_claims):
     }, 400
 
     id = request.args.get('coach_session_id')
+    if id == None:
+        return {
+            "error": "No query parameter id found in request"
+        }, 400
     
     session = CoachSession.query.filter_by(id=id).first()
     # exercises = CoachExercise.query.join(Exercise, CoachExercise.exercise_id==Exercise.id)
