@@ -65,8 +65,6 @@ class Exercise(db.Model):
     name = db.Column(db.String, nullable=False)
     # 1 to 1 relationship with Coach_Exercises table
     coach_exercises = db.relationship('CoachExercise', cascade="all, delete-orphan", lazy=True, uselist=False)
-    # 1 to 1 relationship with Training_entries table
-    training_entries = db.relationship('TrainingEntry', cascade="all, delete-orphan", lazy=True, uselist=False)
 
 class ExerciseSchema(ma.Schema):
     class Meta:

@@ -57,3 +57,4 @@ import backend.health
 import backend.auth
 import backend.user
 import backend.coach_templates
+import backend.client_templates

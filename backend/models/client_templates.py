@@ -1,55 +1,28 @@
 from backend import db, app, ma
 from backend.models.coach_templates import Exercise
 
-# Client_templates Table
-class ClientTemplate(db.Model):
-    __tablename__ = "Client_templates"
+# Training_entries table
+class TrainingEntry(db.Model):
+    __tablename__ = "Training_entries"
 
     id = db.Column(db.Integer, primary_key=True)
-    start_date = db.Column(db.String, nullable=False)
-    end_date = db.Column(db.String, nullable=True)
-    checkins = db.Column(db.String, nullable=False)
-    # many to one relationship with Users table
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    completed = db.Column(db.Boolean, nullable=False)
-    # one to many relationship with Client_sessions
-    client_sessions = db.relationship('ClientSession', cascade="all, delete-orphan", lazy=True)
-    # one to many relationship with Check_ins table
-    check_ins = db.relationship('CheckIn', cascade="all, delete-orphan", lazy=True)
-
-
-class ClientTemplateSchema(ma.Schema):
-    class Meta:
-        fields = ('id','start_date', 'end_date', 'checkins', 'user_id', 'completed')
-
-client_template_schema = ClientTemplateSchema()
-client_template_schemas = ClientTemplateSchema(many=True)
-
-
-# Client_sessions Table
-class ClientSession(db.Model):
-    __tablename__ = "Client_sessions"
-
-    id = db.Column(db.Integer, primary_key=True)
-    client_weight = db.Column(db.Integer, nullable=True)
-    comment = db.Column(db.String, nullable=False)
-    name = db.Column(db.String, nullable=False)
-    order = db.Column(db.Integer, nullable=False)
     # many to one relationship with CLient_templates table
-    client_template_id = db.Column(db.Integer, db.ForeignKey('Client_templates.id'), nullable=False)
-    # one to many relationship with Client_exercises table
-    client_exercises = db.relationship('ClientExercise', cascade="all, delete-orphan", lazy=True)
-    # one to many relationship with Training_entries table
-    training_entries = db.relationship('TrainingEntry', cascade="all, delete-orphan", lazy=True)
+    client_session_id = db.Column(db.Integer, db.ForeignKey('Client_sessions.id'), nullable=False)
+    # one to one relationship with Exercises table
+    name = db.Column(db.String, nullable=False)
+    category = db.Column(db.String, nullable=False)
+    sets = db.Column(db.Integer, nullable=False)
+    reps = db.Column(db.Integer, nullable=False)
+    weight = db.Column(db.Integer, nullable=False)
+    order = db.Column(db.Integer, nullable=False)
 
-class ClientSessionSchema(ma.Schema):
+
+class TrainingEntrySchema(ma.Schema):
     class Meta:
-        fields = ('id','client_weight', 'comment', 'name', 'order', 'client_template_id')
+        fields = ('id', 'client_session_id', 'name', 'category', 'sets', 'reps', 'weight', 'order')
 
-client_session_schema = ClientSessionSchema()
-client_session_schemas = ClientSessionSchema(many=True)
-
-
+training_entry_schema = TrainingEntrySchema()
+training_entry_schemas = TrainingEntrySchema(many=True)
 
 # Client_exercises Table
 class ClientExercise(db.Model):
@@ -73,30 +46,61 @@ class ClientExerciseSchema(ma.Schema):
 client_exercise_schema = ClientExerciseSchema()
 client_exercise_schemas = ClientExerciseSchema(many=True)
 
-
-
-# Training_entries table
-class TrainingEntry(db.Model):
-    __tablename__ = "Training_entries"
+# Client_sessions Table
+class ClientSession(db.Model):
+    __tablename__ = "Client_sessions"
 
     id = db.Column(db.Integer, primary_key=True)
+    client_weight = db.Column(db.Integer, nullable=True)
+    comment = db.Column(db.String, nullable=True)
+    name = db.Column(db.String, nullable=False)
+    order = db.Column(db.Integer, nullable=False)
+    completed = db.Column(db.Boolean, nullable=False)
     # many to one relationship with CLient_templates table
-    client_session_id = db.Column(db.Integer, db.ForeignKey('Client_sessions.id'), nullable=False)
-    # one to one relationship with Exercises table
-    exercise_id = db.Column(db.Integer, db.ForeignKey('Exercises.id'), nullable=False)
-    sets = db.Column(db.Integer, nullable=False)
-    reps = db.Column(db.Integer, nullable=False)
-    weight =db.Column(db.Integer, nullable=False)
+    client_template_id = db.Column(db.Integer, db.ForeignKey('Client_templates.id'), nullable=False)
+    # one to many relationship with Client_exercises table
+    exercises = db.relationship('ClientExercise', cascade="all, delete-orphan", lazy=True, order_by="ClientExercise.order")
+    # one to many relationship with Training_entries table
+    training_entries = db.relationship('TrainingEntry', cascade="all, delete-orphan", lazy=True, order_by="TrainingEntry.order")
 
-
-class TrainingEntrySchema(ma.Schema):
+class ClientSessionSchema(ma.Schema):
+    exercises = ma.Nested(ClientExerciseSchema, many=True)
+    training_entries = ma.Nested(TrainingEntrySchema, many=True)
     class Meta:
-        fields = ('id', 'client_session_id', 'exercise_id' 'sets', 'reps', 'weight')
+        fields = ('id','client_weight', 'comment', 'name', 'order', 'completed', 'client_template_id', 'exercises', 'training_entries')
 
-training_entry_schema = TrainingEntrySchema()
-training_entry_schemas = TrainingEntrySchema(many=True)
+client_session_schema = ClientSessionSchema()
+client_session_schemas = ClientSessionSchema(many=True)
+
+# This schema is used to for the templates to pull partial information about sessions
+class PartialClientSessionSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'order', 'completed')
+
+# Client_templates Table
+class ClientTemplate(db.Model):
+    __tablename__ = "Client_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String, nullable=False)
+    start_date = db.Column(db.String, nullable=False)
+    end_date = db.Column(db.String, nullable=True)
+    # many to one relationship with Users table
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    completed = db.Column(db.Boolean, nullable=False)
+    # one to many relationship with Client_sessions
+    sessions = db.relationship('ClientSession', cascade="all, delete-orphan", lazy=True, order_by="ClientSession.order")
+    # one to many relationship with Check_ins table
+    check_ins = db.relationship('CheckIn', cascade="all, delete-orphan", lazy=True)
 
 
+class ClientTemplateSchema(ma.Schema):
+    sessions = ma.Nested(PartialClientSessionSchema, many=True)
+    class Meta:
+        fields = ('id', 'name', 'start_date', 'end_date', 'user_id', 'completed', 'sessions')
+
+client_template_schema = ClientTemplateSchema()
+client_template_schemas = ClientTemplateSchema(many=True)
 
 # Check_ins table
 class CheckIn(db.Model):
