@@ -42,6 +42,13 @@ def getCoachTemplate(token_claims):
         "template": templateResult
     }
 
+@app.route("/client/template", methods=["POST"])
+@http_guard(renew=True, nullable=False)
+def createCoachTemplate(token_claims):
+    return {
+        "error": "Not implemented"
+    }
+
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getCoachSession(token_claims):
