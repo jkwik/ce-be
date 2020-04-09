@@ -86,4 +86,3 @@ class CoachTemplateSchema(ma.Schema):
 
 coach_template_schema = CoachTemplateSchema()
 coach_template_schemas = CoachTemplateSchema(many=True)
-
