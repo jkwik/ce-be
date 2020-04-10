@@ -11,6 +11,7 @@ from backend.models.user import User, UserSchema, user_schema, Role
 # creates test client
 @pytest.fixture(scope='module')
 def client(request):
+    app.testing = True
     test_client = app.test_client()
 
     # remove newly created user after each test runs
@@ -23,7 +24,16 @@ def client(request):
     request.addfinalizer(teardown)
     return test_client
 
+# fixture to return db session so that pytest-flask-sqlalchemy can mock it
+@pytest.fixture(scope='module')
+def _db():
+    return db
+
+# -------- To Mock Database Connections Include 'db_session' Argument As Test Parameter --------
+
 def test_health(client):
+    row = db_session.query(User).get(1)
+    pdb.set_trace()
     rv = client.get('/health')
     assert rv.json == {'success': True}
 
