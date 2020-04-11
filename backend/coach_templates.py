@@ -286,11 +286,12 @@ def createExercise(token_claims):
         raise
 
     # retrieve created exercises
-    exercise = Exercise.query.filter_by(name=body['name'], category=body['category']).first()
-
-    result = exercise_schema.dump(exercise)
+    exercises = Exercise.query.all()
+    result = exercise_schemas.dump(exercises)
     
-    return result
+    return {
+        "exercises": result
+    }
 
 
 
