@@ -2,9 +2,10 @@ from backend import app, db
 from backend.middleware.middleware import http_guard
 from flask import request, session
 from sqlalchemy.exc import IntegrityError
-# from sqlalchemy.orm import defer, joinedload, load_only, subqueryload
+from sqlalchemy import func
+# from sqlalchemy.orm import defer, joinedload, load_only, subqueryload, lazyload
 from backend.models.user import Role
-from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schema
+from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schemas, exercise_schema
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -116,30 +117,179 @@ def coachExercise(token_claims):
     return result
 
 
-# Return the exercise from the exercise_id passed in
-@app.route("/exercise", methods=['GET'])
+# Return all exercises from the Exercises Table
+@app.route("/exercises", methods=['GET'])
 @http_guard(renew=True, nullable=False)
-def exercise(token_claims):
+def exercises(token_claims):
     # check that the user's role is COACH
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
     }, 400
-
-    id = request.args.get('exercise_id')
-
-    if id == None:
-        return {
-            "error": "No query parameter id found in request"
-        }, 400
     
-    exercise = Exercise.query.filter_by(id=id).first()
+    exercises = Exercise.query.all()
 
-    if exercise == None:
+    if exercises == None:
         return {
-            "error": "Exercise not found with given id: " + id
+            "error": "No exercises have been created yet"
         }, 404
 
-    result = exercise_schema.dump(exercise)
+    result = exercise_schemas.dump(exercises)
 
+    return {
+        "exercises": result
+    }
+
+
+@app.route("/coach/template", methods=['POST'])
+@http_guard(renew=True, nullable=False)
+def createTemplate(token_claims):
+    # check that the user's role is COACH
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    # check if template name is available, no duplicates allowed
+    check_duplicate = CoachTemplate.query.filter_by(name=body['name']).first()
+
+    if check_duplicate:
+        return {
+            "error": "Template name already exists"
+        }, 400
+    
+    
+    new_template = CoachTemplate(name=body['name'])
+    
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(new_template)
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # retrieve created template
+    template = CoachTemplate.query.filter_by(name=body['name']).first()
+
+    result = coach_template_schema.dump(template)
+    
     return result
+
+
+@app.route("/coach/session", methods=['POST'])
+@http_guard(renew=True, nullable=False)
+def createSession(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    # check if template name is available, no duplicates allowed
+    check_duplicate = CoachSession.query.filter_by(name=body['name'], coach_template_id=body['coach_template_id']).first()
+
+    if check_duplicate:
+        return {
+            "error": "Session name already exists for this template"
+        }, 400
+    
+    # find current max order value for sessions belonging to the passed in coach_template_id
+    max_order = db.session.query(func.max(CoachSession.order)).filter_by(coach_template_id=body['coach_template_id']).scalar()
+    # 
+    # increment the order by 1
+    max_order += 1
+    # create the new session with name, coach_template_id, and order
+    new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order)
+    
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(new_session)
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # retrieve created session
+    session = CoachSession.query.filter_by(name=body['name']).first()
+
+    result = coach_session_schema.dump(session)
+    
+    return result
+
+
+@app.route("/coach/exercise", methods=['POST'])
+@http_guard(renew=True, nullable=False)
+def createCoachExercise(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+    
+    # find current max order value for sexercise belonging to the passed in coach_session_id
+    max_order = db.session.query(func.max(CoachExercise.order)).filter_by(coach_session_id=body['coach_session_id']).scalar()
+    # 
+    # increment the order by 1
+    max_order += 1
+    # create the new coach exercise with coach_exercise_id, coach_session_id, and order
+    new_exercise = CoachExercise(exercise_id=body['exercise_id'], coach_session_id=body['coach_session_id'], order=max_order)
+    
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(new_exercise)
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # retrieve created exercises
+    exercises = CoachExercise.query.filter_by(coach_session_id=body['coach_session_id'])
+
+    result = coach_exercise_schemas.dump(exercises)
+    
+    return {
+        "session_exercises": result
+    }
+
+@app.route("/exercise", methods=['POST'])
+@http_guard(renew=True, nullable=False)
+def createExercise(token_claims):
+    if token_claims['role'] != Role.COACH.name and token_claims['role'] != Role.CLIENT.name:
+        return {
+            "error": "Expected role of COACH or CLIENT"
+        }, 400
+
+    body = request.get_json(force=True)
+    
+    # create the new exercise with name and category
+    new_exercise = Exercise(name=body['name'], category=body['category'])
+    
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(new_exercise)
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # retrieve created exercises
+    exercises = Exercise.query.all()
+
+    result = exercise_schemas.dump(exercises)
+    
+    return {
+        "exercises": result
+    }
