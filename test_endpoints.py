@@ -30,16 +30,19 @@ test_coach = {
 }
 
 # Creates the app test client so that we can use it to call endpoints in our applicatoin
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='function')
 def client(request):
     test_client = app.test_client()
     return test_client
 
 # Database fixture. We create an in-memory SQlite database and use this for all tests. That way
-# we don't put stress on our production database
-@pytest.fixture(scope='module')
+# we don't put stress on our production database. It's important here that the scope is set to function
+# so that the transactions are rolled back on every transaction
+@pytest.fixture(scope='function')
 def _db():
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///test.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
+    # Comment above and uncomment below to persist the database to the local folder structure
+    # app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://test.db"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Create sessions table to handle login sessions
@@ -77,8 +80,7 @@ def test_health(client):
 
 #  ----------------- USER TESTS -----------------
 
-# Removing db_session works but raises another issue with inserting UUID's
-def test_signup(client):
+def test_signup(client, db_session):
     resp = sign_up_user_for_testing(client, test_client)
     del resp['user']['id']
     assert resp ==\
@@ -96,7 +98,7 @@ def test_signup(client):
             }
         }
 
-def test_approve_client(client, db_session):
+def test_verify_client(client, db_session):
     # Create an unapproved user
     resp = sign_up_user_for_testing(client, test_client)
     assert resp['user']['approved'] == False
@@ -151,7 +153,6 @@ def test_client_list(client, db_session):
 
     # Grab the clients through the endpoint
     clients_resp, code = request(client, "GET", '/clientList')
-    pdb.set_trace()
     assert clients_resp != None and code == 200
 
 
