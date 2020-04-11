@@ -265,9 +265,9 @@ def createCoachExercise(token_claims):
 @app.route("/exercise", methods=['POST'])
 @http_guard(renew=True, nullable=False)
 def createExercise(token_claims):
-    if token_claims['role'] != Role.COACH.name:
+    if token_claims['role'] != Role.COACH.name and token_claims['role'] != Role.CLIENT.name:
         return {
-            "error": "Expected role of COACH"
+            "error": "Expected role of COACH or CLIENT"
         }, 400
 
     body = request.get_json(force=True)
