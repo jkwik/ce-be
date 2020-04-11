@@ -291,3 +291,65 @@ def createExercise(token_claims):
     result = exercise_schema.dump(exercise)
     
     return result
+
+
+
+@app.route("/coach/template", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def updateTemplate(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    # check if coach wants to change the template name
+    # has_name = False
+    # if 'name' in body:
+    #     update_name = body['name']
+    #     has_name = True
+
+    # grab incoming session ids
+    incoming_ids = []
+    for val in body['sessions']:
+        incoming_ids.append(val['id'])
+    
+    # print(incoming_ids)
+
+    # Grab all current sessions
+    sessions = CoachSession.query.filter_by(coach_template_id=body['id'])
+
+    # # For each session in the CoachSessions table belonging to this template, 
+    for s in sessions:
+        # if current_session_id is present in the array of sessions they’ve passed
+        # Then update the order of that session
+        if s.id in incoming_ids:
+            x = 0
+            # try:
+            #     # update session in COachSessions table
+            #     s.name = body[]
+            #     db.session.commit()
+            # except Exception as e:
+            #     return {
+            #         "error": "Internal Server Error"
+            #     }, 500
+            #     raise
+        # Else delete the current_session_id from the database
+        else:
+            print("here")
+            # try:
+            #     # create new template in CoachTemplate table
+            #     CoachSession.query.filter_by(id=s.id).delete()
+            #     db.session.commit()
+            # except Exception as e:
+            #     return {
+            #         "error": "Internal Server Error"
+            #     }, 500
+            #     raise
+
+    result = coach_session_schemas.dump(sessions)
+    
+    return {
+        "result": result
+    }
