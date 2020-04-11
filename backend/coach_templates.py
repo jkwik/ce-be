@@ -28,7 +28,7 @@ def coachTemplates(token_claims):
     result = coach_template_schemas.dump(templates)
 
     return {
-        "result": result
+        "templates": result
     }
 
 # Return the coach_template from coach_template_id passed in
