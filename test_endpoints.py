@@ -154,22 +154,11 @@ def test_client_list(client, db_session):
     # Grab the clients through the endpoint
     clients_resp, code = request(client, "GET", '/clientList')
     assert clients_resp != None and code == 200
-
-
-    # these would need to be populate with all of the
-    # approved/unapproved/past clients in our database
-    # so for now we are going to test if the response
-    # simply gives us data back
-    # approvedClients = []
-    # unapprovedClients = []
-    # pastClients = []
-    # expected_json_response = {
-    #         "approvedClients": approvedClients,
-    #         "unapprovedClients": unapprovedClients,
-    #         "pastClients": pastClients
-    #     }
     
-    # assert client_list_rv.json != None
+    # Check that the clients are returned
+    assert len(clients_resp['approvedClients']) != 0
+    assert len(clients_resp['unapprovedClients']) != 0
+    assert len(clients_resp['pastClients']) != 0
 
 # def test_update_profile(client):
 #     assert True
