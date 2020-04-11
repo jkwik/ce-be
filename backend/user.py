@@ -139,7 +139,7 @@ def signUp():
         }, 500
 
     # Generate a new verification token
-    verificationToken = uuid.uuid1()
+    verificationToken = str(uuid.uuid1())
 
     # Update the users access_token and verification_token and commit the result
     user.access_token = token

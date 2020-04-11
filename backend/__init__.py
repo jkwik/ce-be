@@ -28,7 +28,7 @@ db = SQLAlchemy(app)
 # Encryption package for passwords
 bcrypt = Bcrypt(app)
 
-# Session configuration, this creates the session table if it doesn't exist
+# Session configuration, when first running the app, uncomment the section of code below that handles creating the session table
 app.config["SESSION_TYPE"] = 'sqlalchemy'
 app.config["SESSION_COOKIE_NAME"] = 'access_token'
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -51,6 +51,10 @@ mail = Mail(app)
 
 # Initialize marshmallow for schema parsing
 ma = Marshmallow(app)
+
+# Uncomment these lines to migrate the current model schema into the database
+# from backend.models.user import User
+# db.create_all()
 
 # Here, we import all the different modules
 import backend.health

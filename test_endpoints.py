@@ -6,13 +6,16 @@ import pdb
 import unittest
 from backend import app, db
 from backend.models.user import User, UserSchema, user_schema, Role
-import backend
+from flask_sqlalchemy import SQLAlchemy
+from flask_session import Session
+
+#  ----------------- SETUP -----------------
 
 # Test client object that should be used when creating test clients
 test_client = {
     'first_name': 'backend_tests_client',
     'last_name': 'backend_tests_client',
-    'email': 'backendclient@test.com',
+    'email': 'test@client.com',
     'password': 'fakepassword',
     'role': 'CLIENT'
 }
@@ -21,7 +24,7 @@ test_client = {
 test_coach = {
     'first_name': 'backend_tests_coach',
     'last_name': 'backend_tests_coach',
-    'email': 'backendcoach@test.com',
+    'email': 'test@coach.com',
     'password': 'fakepassword',
     'role': 'COACH'
 }
@@ -32,10 +35,25 @@ def client(request):
     test_client = app.test_client()
     return test_client
 
-# Fixture 
+# Database fixture. We create an in-memory SQlite database and use this for all tests. That way
+# we don't put stress on our production database
 @pytest.fixture(scope='module')
 def _db():
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///test.db"
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Create sessions table to handle login sessions
+    session = Session(app)
+    session.app.session_interface.db.create_all()
+
+    # We migrate the model into the sqlite database. It will create all tables based on the schema.
+    # We need to use the production database in order to migrate the data because the models are attached to this
+    # object
+    db.create_all()
+
     return db
+
+#  ----------------- CONFIGURATION TEST -----------------
 
 # Test that the mocked db_session works and doesn't persist beyond the scope of a test
 def test_a_transaction(db_session):
@@ -57,7 +75,10 @@ def test_health(client):
     assert code == 200
     assert resp == {'success': True}
 
-def test_signup(client, db_session):
+#  ----------------- USER TESTS -----------------
+
+# Removing db_session works but raises another issue with inserting UUID's
+def test_signup(client):
     resp = sign_up_user_for_testing(client, test_client)
     del resp['user']['id']
     assert resp ==\
@@ -98,26 +119,56 @@ def test_approve_client(client, db_session):
     assert resp == None
 
 def test_client_list(client, db_session):
-    resp = sign_up_user_for_testing(client, test_coach)
-    assert resp != None
+    # Sign up a coach so that sign is as a coach.
+    user = sign_up_user_for_testing(client, test_coach)
+    assert user['user'] != None
+    assert user['user']['role'] == 'COACH'
 
-    login_rv = login_user_for_testing(client, new_coach)
-    client_list_rv = client.get("/clientList")
+    # Sign into the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Populate the database with approved, unapproved and past clients
+    clients = [
+        User(
+            first_name='test1', last_name='test1',
+            email='test1@user.com', password='fakepassword',
+            role='CLIENT', verified=False, approved=None
+        ),
+        User(
+            first_name='test2', last_name='test2',
+            email='test2@user.com', password='fakepassword',
+            role='CLIENT', verified=False, approved=True
+        ),
+        User(
+            first_name='test3', last_name='test3',
+            email='test3@user.com', password='fakepassword',
+            role='CLIENT', verified=False, approved=False
+        )
+    ]
+    db_session.bulk_save_objects(clients)
+    db_session.commit()
+
+    # Grab the clients through the endpoint
+    clients_resp, code = request(client, "GET", '/clientList')
+    pdb.set_trace()
+    assert clients_resp != None and code == 200
+
 
     # these would need to be populate with all of the
     # approved/unapproved/past clients in our database
     # so for now we are going to test if the response
     # simply gives us data back
-    approvedClients = []
-    unapprovedClients = []
-    pastClients = []
-    expected_json_response = {
-            "approvedClients": approvedClients,
-            "unapprovedClients": unapprovedClients,
-            "pastClients": pastClients
-        }
+    # approvedClients = []
+    # unapprovedClients = []
+    # pastClients = []
+    # expected_json_response = {
+    #         "approvedClients": approvedClients,
+    #         "unapprovedClients": unapprovedClients,
+    #         "pastClients": pastClients
+    #     }
     
-    assert client_list_rv.json != None
+    # assert client_list_rv.json != None
 
 # def test_update_profile(client):
 #     assert True
@@ -185,8 +236,7 @@ def test_client_list(client, db_session):
 #     )    
 #     return user
 
-# helper method to sign up a new user since almost every test method
-# will have to do this
+# sign up a user. It returns the user response. It also error checks
 def sign_up_user_for_testing(client, user):
     mimetype = 'application/json'
     headers = {
@@ -226,29 +276,24 @@ def request(client, method, url, data=None):
 
 # test http guard 
 
-# def login_user_for_testing(client, new_user):
-#     mimetype = 'application/json'
-#     headers = {
-#         'Content-Type': mimetype,
-#         'Accept': mimetype
-#     }
-#     data = {
-#         'first_name': new_user.first_name,
-#         'last_name': new_user.last_name,
-#         'email': new_user.email,
-#         'password': new_user.password,
-#         'approved': new_user.approved,
-#         'check_in': new_user.check_in,
-#         'coach_id': new_user.coach_id,
-#         'access_token': new_user.access_token,
-#         'role': new_user.role,
-#         'verification_token': new_user.verification_token,
-#         'verified': new_user.verified,
-#         'reset_token': new_user.reset_token 
-#     }
-#     login_rv = client.post("/auth/login", data=json.dumps(data), headers=headers)
+# Logs a user in. Input user should contain email and password. It also error checks
+def login_user_for_testing(client, user):
+    mimetype = 'application/json'
+    headers = {
+        'Content-Type': mimetype,
+        'Accept': mimetype
+    }
+    data = {
+        'email': user['email'],
+        'password': user['password']
+    }
 
-#     return login_rv
+    resp = client.post("/auth/login", data=json.dumps(data), headers=headers)
+
+    assert resp.json != None
+    assert resp._status_code == 200
+
+    return resp.json
 
 # # a method to get the current user id
 # # there is probably a better way to do this 
