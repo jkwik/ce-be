@@ -201,9 +201,14 @@ def createSession(token_claims):
     
     # find current max order value for sessions belonging to the passed in coach_template_id
     max_order = db.session.query(func.max(CoachSession.order)).filter_by(coach_template_id=body['coach_template_id']).scalar()
-    # 
-    # increment the order by 1
-    max_order += 1
+    
+    # if no sessions exist for this template, the newly created session will have order = 1
+    if max_order is None:
+        max_order = 1
+    else:
+        # increment the order by 1
+        max_order += 1
+
     # create the new session with name, coach_template_id, and order
     new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order)
     
@@ -218,7 +223,7 @@ def createSession(token_claims):
         raise
 
     # retrieve created session
-    session = CoachSession.query.filter_by(name=body['name']).first()
+    session = CoachSession.query.filter_by(name=body['name'], coach_template_id=body['coach_template_id']).first()
 
     result = coach_session_schema.dump(session)
     
@@ -237,9 +242,14 @@ def createCoachExercise(token_claims):
     
     # find current max order value for sexercise belonging to the passed in coach_session_id
     max_order = db.session.query(func.max(CoachExercise.order)).filter_by(coach_session_id=body['coach_session_id']).scalar()
-    # 
-    # increment the order by 1
-    max_order += 1
+
+    # if no sessions exist for this template, the newly created session will have order = 1
+    if max_order is None:
+        max_order = 1
+    else:
+        # increment the order by 1
+        max_order += 1
+
     # create the new coach exercise with coach_exercise_id, coach_session_id, and order
     new_exercise = CoachExercise(exercise_id=body['exercise_id'], coach_session_id=body['coach_session_id'], order=max_order)
     
