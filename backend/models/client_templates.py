@@ -87,17 +87,23 @@ class ClientTemplate(db.Model):
     end_date = db.Column(db.String, nullable=True)
     # many to one relationship with Users table
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', lazy=True, uselist=False, single_parent=True, primaryjoin="User.id==ClientTemplate.user_id")
     completed = db.Column(db.Boolean, nullable=False)
     # one to many relationship with Client_sessions
     sessions = db.relationship('ClientSession', cascade="all, delete-orphan", lazy=True, order_by="ClientSession.order")
     # one to many relationship with Check_ins table
     check_ins = db.relationship('CheckIn', cascade="all, delete-orphan", lazy=True)
 
+# This partial user schema is used in retrieving templates
+class PartialUserSchema(ma.Schema):
+    class Meta:
+        fields = ('first_name', 'last_name', 'email')
 
 class ClientTemplateSchema(ma.Schema):
     sessions = ma.Nested(PartialClientSessionSchema, many=True)
+    user = ma.Nested(PartialUserSchema, many=False)
     class Meta:
-        fields = ('id', 'name', 'start_date', 'end_date', 'user_id', 'completed', 'sessions')
+        fields = ('id', 'name', 'start_date', 'end_date', 'user_id', 'completed', 'sessions', 'user')
 
 client_template_schema = ClientTemplateSchema()
 client_template_schemas = ClientTemplateSchema(many=True)

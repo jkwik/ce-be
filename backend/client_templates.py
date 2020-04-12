@@ -1,15 +1,16 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import date
+from sqlalchemy import func
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
-def getCoachTemplates(token_claims):
+def getClientTemplates(token_claims):
     user_id = request.args.get('user_id')
     if user_id == None:
         return {
@@ -29,7 +30,7 @@ def getCoachTemplates(token_claims):
 
 @app.route("/client/template", methods=["GET"])
 @http_guard(renew=True, nullable=False)
-def getCoachTemplate(token_claims):
+def getClientTemplate(token_claims):
     # Any logged in user should be able to access this method
     id = request.args.get('id')
     if id == None:
@@ -47,7 +48,7 @@ def getCoachTemplate(token_claims):
 
 @app.route("/client/template", methods=["POST"])
 @http_guard(renew=True, nullable=False)
-def createCoachTemplate(token_claims):
+def createClientTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Logged in user doesn't have a role of COACH"
@@ -135,7 +136,7 @@ def createCoachTemplate(token_claims):
 
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
-def getCoachSession(token_claims):
+def getClientSession(token_claims):
     # Any logged in user should be able to access this method
     template_id = request.args.get('template_id')
     session_id = request.args.get('session_id')
@@ -159,3 +160,79 @@ def getCoachSession(token_claims):
     return {
         "session": sessionResult
     }
+
+@app.route("/client/session", methods=["POST"])
+@http_guard(renew=True, nullable=False)
+def createClientSession(token_claims):
+    body = request.get_json(force=True)
+
+    if 'client_template_id' not in body or 'name' not in body or 'exercises' not in body:
+        return {
+            "error": "Must specify client_template_id (int) name (string) and exercises (array)"
+        }, 400
+
+    # Check that a template with client_template_id exists
+    client_template = ClientTemplate.query.filter_by(id=body['client_template_id']).first()
+    if client_template == None:
+        return {
+            "error": "No client template found with template id: " + str(body['client_template'])
+        }, 404
+
+    # Find the next order for the client_session/training_entry based on the role of the requester
+    next_order = findNextSessionOrder(body['client_template_id'])
+
+    # Create a new client_session and insert it into the database
+    client_session = ClientSession(
+        name=body['name'], order=next_order, client_template_id=body['client_template_id'],
+        exercises=[], training_entries=[]
+    )
+
+    # Iterate through the exercises and insert them as exercises if COACH or training_entries if CLIENT
+    for exercise in body['exercises']:
+        if token_claims['role'] == Role.COACH.name:
+            client_session.completed = False
+            client_session.exercises.append(
+                ClientExercise(
+                    sets=exercise['sets'], reps=exercise['reps'], weight=exercise['weight'],
+                    category=exercise['category'], name=exercise['name'], order=exercise['order']
+                )
+            )
+        else:
+            client_session.completed = True
+            client_session.training_entries.append(
+                TrainingEntry(
+                    sets=exercise['sets'], reps=exercise['reps'], weight=exercise['weight'],
+                    category=exercise['category'], name=exercise['name'], order=exercise['order']
+                )
+            )
+
+    # Add session into the database, refresh its contents and return as json
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(client_session)
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    db.session.refresh(client_session)
+    
+    result = client_session_schema.dump(client_session)
+
+    return {
+        "session": result
+    }
+
+def findNextSessionOrder(client_template_id):
+    """
+    Finds the next order in a client templates session
+    """
+    next_order = db.session.query(func.max(ClientSession.order)).filter_by(client_template_id=client_template_id).scalar()
+    
+    if next_order == None:
+        return 1
+
+    return next_order + 1
