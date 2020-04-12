@@ -6,6 +6,7 @@ from sqlalchemy import func
 # from sqlalchemy.orm import defer, joinedload, load_only, subqueryload, lazyload
 from backend.models.user import Role
 from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schemas, exercise_schema
+from backend.helpers.coach_templates import setNonNullCoachSessionFields, isSessionPresent
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -374,66 +375,47 @@ def updateTemplate(token_claims):
 
     body = request.get_json(force=True)
 
-    if 'id' not in body or 'name' not in body or 'sessions' not in body:
+    if 'id' not in body:
         return {
-            "error": "Must specify id (int), name (string), and sessions (array)"
+            "error": "No parameter id found in request body"
         }, 400
+
     # grab the template being updated
-    update_template = CoachTemplate.query.filter_by(id=body['id']).first()
+    coach_template = CoachTemplate.query.filter_by(id=body['id']).first()
 
     # check if coach wants to change the template name
-    change_name = False
     # only change name if it is different than the name currently in the database
-    if body['name'] != update_template.name:
-        change_name = True
+    if 'name' in body:
+        if body['name'] != coach_template.name:
+            coach_template.name = body['name']
 
-    # grab incoming session ids
-    incoming_ids = []
-    for val in body['sessions']:
-        incoming_ids.append(val['id'])
-
-    # Grab all the sessions belonging to the template being updated
-    sessions = CoachSession.query.filter_by(coach_template_id=body['id'])
-
+    # Iterate through the coach_sessions and for each session, check if it is present in the body, if it is, then update the session
+    # and insert it into coach_sessions. If it isn't present, then don't insert into coach_sessions
+    if 'sessions' in body:
+        coach_sessions = []
+        for coach_session in coach_template.sessions:
+            present, index = isSessionPresent(coach_session, body['sessions'])
+            if present:
+                setNonNullCoachSessionFields(coach_session, body['sessions'][index])
+                coach_sessions.append(coach_session)
+        # Set the coach_templates sessions to the new array of CoachSessions. By committing these new sessions,
+        # sqlalchemy handles delete the sessions that aren't present in the updated array, and updating those
+        # that are present in the updated array
+        coach_template.sessions = coach_sessions
+                
     try:
-        # update template name if the coach requested it to be changed
-        if change_name == True:
-            update_template.name = body['name']
-            db.session.commit()
-        # update session in CoachSessions table
+        db.session.commit()
+        db.session.refresh(coach_template)
     except Exception as e:
+        print(e)
         return {
             "error": "Internal Server Error"
         }, 500
         raise
 
-    # For each session in the CoachSessions table belonging to this template, 
-    for s in sessions:
-        # if current_session_id is present in the array of sessions they’ve passed
-        # Then update the order of that session
-        if s.id in incoming_ids:
-            # find the correct incoming order value to update this session.order
-            for x in body['sessions']:
-                if x['id'] == s.id:
-                    s.order = x['order']
-                    db.session.commit()
-        # Else delete the current_session_id from the database
-        else:
-            try:
-                # delete this session
-                CoachSession.query.filter_by(id=s.id).delete()
-                db.session.commit()
-            except Exception as e:
-                return {
-                    "error": "Internal Server Error"
-                }, 500
-                raise
-
-    
-    template = CoachTemplate.query.filter_by(id=body['id']).first()
-    result = coach_template_schema.dump(template)
-    
-    return result
+    return {
+        "template": coach_template_schema.dump(coach_template)
+    }
 
 
 @app.route("/coach/session", methods=['PUT'])
