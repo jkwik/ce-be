@@ -304,6 +304,46 @@ def createExercise(token_claims):
     }
 
 
+@app.route("/coach/template/delete", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def deleteTemplate(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
+    body = request.get_json(force=True)
+    id = body['coach_template_id']
+    
+    # check that the correct param is passed
+    if id == None:
+        return {
+            "error": "No query parameter coach_template_id found in request"
+        }, 400
+
+    # grab table to be deleted
+    template = CoachTemplate.query.filter_by(id=id).first()
+
+    # check that table to delte actually exists
+    if template == None:
+        return {
+            "error": "Coach_template not found with given id"
+        }
+    
+    try:
+        # Delete table from database
+        CoachTemplate.query.filter_by(id=id).delete()
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return {
+        "success": True
+    }
+
 
 @app.route("/coach/template", methods=['PUT'])
 @http_guard(renew=True, nullable=False)
@@ -315,52 +355,60 @@ def updateTemplate(token_claims):
 
     body = request.get_json(force=True)
 
+    # grab the template being updated
+    update_template = CoachTemplate.query.filter_by(id=body['id']).first()
+
     # check if coach wants to change the template name
-    # has_name = False
-    # if 'name' in body:
-    #     update_name = body['name']
-    #     has_name = True
+    has_name = False
+    if 'name' in body:
+        # only change name if it is different than the name currently in the database
+        if body['name'] != update_template.name:
+            has_name = True
 
     # grab incoming session ids
     incoming_ids = []
     for val in body['sessions']:
         incoming_ids.append(val['id'])
-    
-    # print(incoming_ids)
 
-    # Grab all current sessions
+    # print(body['sessions'][0]['order'])
+    # Grab all the sessions belonging to the template being updated
     sessions = CoachSession.query.filter_by(coach_template_id=body['id'])
 
-    # # For each session in the CoachSessions table belonging to this template, 
+    try:
+        # update template name if the coach requested it to be changed
+        if has_name == True:
+            update_template.name = body['name']
+            db.session.commit()
+        # update session in CoachSessions table
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    # For each session in the CoachSessions table belonging to this template, 
     for s in sessions:
         # if current_session_id is present in the array of sessions they’ve passed
         # Then update the order of that session
         if s.id in incoming_ids:
-            x = 0
-            # try:
-            #     # update session in COachSessions table
-            #     s.name = body[]
-            #     db.session.commit()
-            # except Exception as e:
-            #     return {
-            #         "error": "Internal Server Error"
-            #     }, 500
-            #     raise
+            # create new template in CoachTemplate table
+            for x in body['sessions']:
+                if x['id'] == s.id:
+                    s.order = x['order']
+                    db.session.commit()
         # Else delete the current_session_id from the database
         else:
-            print("here")
-            # try:
-            #     # create new template in CoachTemplate table
-            #     CoachSession.query.filter_by(id=s.id).delete()
-            #     db.session.commit()
-            # except Exception as e:
-            #     return {
-            #         "error": "Internal Server Error"
-            #     }, 500
-            #     raise
+            try:
+                # create new template in CoachTemplate table
+                CoachSession.query.filter_by(id=s.id).delete()
+                db.session.commit()
+            except Exception as e:
+                return {
+                    "error": "Internal Server Error"
+                }, 500
+                raise
 
-    result = coach_session_schemas.dump(sessions)
+    template = CoachTemplate.query.filter_by(id=body['id']).first()
+    result = coach_template_schema.dump(template)
     
-    return {
-        "result": result
-    }
+    return result
