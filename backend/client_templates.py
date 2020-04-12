@@ -3,10 +3,10 @@ from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
+from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import date
-from sqlalchemy import func
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -134,6 +134,52 @@ def createClientTemplate(token_claims):
         "template": result
     }
 
+@app.route("/client/template", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def updateClientTemplate(token_claims):
+    body = request.get_json(force=True)
+
+    if 'id' not in body:
+        return {
+            "error": "No parameter id found in request body"
+        }, 400
+
+    # Get the client template
+    client_template = ClientTemplate.query.get(body['id'])
+    if client_template == None:
+        return {
+            "error": "No client template found with id: " + str(body['id'])
+        }, 404
+
+    # Set all fields in client_template that were present in the body
+    setNonNullClientTemplateFields(client_template, body)
+
+    # Iterate through the client_sessions and for each session, check if it is present in the body, if it is, then update the session
+    # and insert it into client_sessions. If it isn't present, then don't insert into client_sessions
+    if 'sessions' in body:
+        client_sessions = []
+        for client_session in client_template.sessions:
+            present, index = isSessionPresent(client_session, body['sessions'])
+            if present:
+                setNonNullClientSessionFields(client_session, body['sessions'][index])
+                client_sessions.append(client_session)
+
+        client_template.sessions = client_sessions
+                
+    try:
+        db.session.commit()
+        db.session.refresh(client_template)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return {
+        "template": client_template_schema.dump(client_template)
+    }
+
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientSession(token_claims):
@@ -226,13 +272,58 @@ def createClientSession(token_claims):
         "session": result
     }
 
-def findNextSessionOrder(client_template_id):
-    """
-    Finds the next order in a client templates session
-    """
-    next_order = db.session.query(func.max(ClientSession.order)).filter_by(client_template_id=client_template_id).scalar()
-    
-    if next_order == None:
-        return 1
+@app.route("/client/session", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def updateClientSession(token_claims):
+    body = request.get_json(force=True)
 
-    return next_order + 1
+    if 'id' not in body:
+        return {
+            "error": "No id parameter found in request body"
+        }, 400
+
+    client_session = ClientSession.query.get(body['id'])
+    if client_session == None:
+        return {
+            "error": "No client session found with supplied id"
+        }, 404
+
+    # Update the session metadata that the request has asked for, handle updating client_exercises separately
+    setNonNullClientSessionFields(client_session, body)
+
+    # Update the client_exercises by deleting all the current ones and re-inserting them
+    if 'exercises' in body:
+        client_exercises = []
+        for client_exercise in body['exercises']:
+            client_exercises.append(
+                ClientExercise(
+                    name=client_exercise['name'], category=client_exercise['category'], sets=client_exercise['sets'],
+                    reps=client_exercise['reps'], weight=client_exercise['weight'], order=client_exercise['order']
+                )
+            )
+        client_session.exercises = client_exercises
+    
+    if 'training_entries' in body:
+        client_training_entries = []
+        for client_training_entry in body['training_entries']:
+            client_training_entries.append(
+                TrainingEntry(
+                    name=client_training_entry['name'], category=client_training_entry['category'], sets=client_training_entry['sets'],
+                    reps=client_training_entry['reps'], weight=client_training_entry['weight'], order=client_training_entry['order']
+                )
+            )
+        client_session.training_entries = client_training_entries
+
+    try:
+        db.session.commit()
+        db.session.refresh(client_session)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return  {
+        "session": client_session_schema.dump(client_session)
+    }
