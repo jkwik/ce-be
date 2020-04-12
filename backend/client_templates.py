@@ -3,10 +3,10 @@ from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
+from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import date
-from sqlalchemy import func
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -134,6 +134,51 @@ def createClientTemplate(token_claims):
         "template": result
     }
 
+@app.route("/client/template", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def updateClientTemplate(token_claims):
+    body = request.get_json(force=True)
+
+    if 'id' not in body:
+        return {
+            "error": "No parameter id found in request body"
+        }, 400
+
+    # Get the client template
+    client_template = ClientTemplate.query.get(body['id'])
+
+    # Set all fields in client_template that were present in the body
+    setNonNullClientTemplateFields(client_template, body)
+
+    # Iterate through the client_sessions and for each session, check if it is present in the body, if it is, then update the session
+    # and insert it into client_sessions. If it isn't present, then don't insert into client_sessions
+    client_sessions = []
+    if 'sessions' in body:
+        for client_session in client_template.sessions:
+            present, index = isSessionPresent(client_session, body['sessions'])
+            if present:
+                setNonNullClientSessionFields(client_session, body['sessions'][index])
+                client_sessions.append(client_session)
+
+    # Set the client_templates sessions to the new array of ClientSessions. By committing these new sessions,
+    # sqlalchemy handles delete the sessions that aren't present in the updated array, and updating those
+    # that are present in the updated array
+    client_template.sessions = client_sessions
+                
+    try:
+        db.session.commit()
+        db.session.refresh(client_template)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return {
+        "template": client_template_schema.dump(client_template)
+    }
+
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientSession(token_claims):
@@ -225,14 +270,3 @@ def createClientSession(token_claims):
     return {
         "session": result
     }
-
-def findNextSessionOrder(client_template_id):
-    """
-    Finds the next order in a client templates session
-    """
-    next_order = db.session.query(func.max(ClientSession.order)).filter_by(client_template_id=client_template_id).scalar()
-    
-    if next_order == None:
-        return 1
-
-    return next_order + 1
