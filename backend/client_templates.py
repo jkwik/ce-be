@@ -291,7 +291,7 @@ def updateClientSession(token_claims):
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
 
-    # Update the client_exercises by deleting all the current ones and re-inserting them
+    # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
     if 'exercises' in body:
         client_exercises = []
         for client_exercise in body['exercises']:
@@ -303,6 +303,7 @@ def updateClientSession(token_claims):
             )
         client_session.exercises = client_exercises
     
+    # Update the training_entries by replacing the ones in client_session with the ones passed in the request
     if 'training_entries' in body:
         client_training_entries = []
         for client_training_entry in body['training_entries']:
