@@ -376,7 +376,7 @@ def updateTemplate(token_claims):
 
     if 'id' not in body or 'name' not in body or 'sessions' not in body:
         return {
-            "error": "Must specify id (int) name (string) and sessions (array)"
+            "error": "Must specify id (int), name (string), and sessions (array)"
         }, 400
     # grab the template being updated
     update_template = CoachTemplate.query.filter_by(id=body['id']).first()
@@ -432,5 +432,71 @@ def updateTemplate(token_claims):
     
     template = CoachTemplate.query.filter_by(id=body['id']).first()
     result = coach_template_schema.dump(template)
+    
+    return result
+
+
+@app.route("/coach/session", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def updateSession(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    if 'id' not in body or 'name' not in body or 'order' not in body or 'coach_template_id' not in body or 'coach_exercises' not in body:
+        return {
+            "error": "Must specify id (int), name (string), order (int), coach_template_id (int), coach_exercises (array)"
+        }, 400
+    # grab the session being updated
+    update_session = CoachSession.query.filter_by(id=body['id']).first()
+
+    # check if coach wants to change the template name
+    # only change name if it is different than the name currently in the database
+    if body['name'] != update_session.name:
+        try:
+            # update template name if the coach requested it to be changed
+            update_session.name = body['name']
+            db.session.commit()
+            # update session in CoachSessions table
+        except Exception as e:
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
+
+    
+    # get all coach exercies belonging to the coach session being updated
+    exercises = CoachExercise.query.filter_by(coach_session_id=body['id'])
+
+    # for each exercise currently belonging to the coach session being updated
+    for exercise in exercises:
+        try:
+            # delete all current coach exercises belonging to the coach session being updated
+            CoachExercise.query.filter_by(id=exercise.id).delete()
+            db.session.commit()
+        except Exception as e:
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
+        
+    # for each coach exercise passed in
+    for exercise_passed in body['coach_exercises']:
+        new_exercise = CoachExercise(exercise_id=exercise_passed['exercise_id'], coach_session_id=exercise_passed['coach_session_id'], order=exercise_passed['order'])
+        try:
+            # create a coach exercise
+            db.session.add(new_exercise)
+            db.session.commit()
+        except Exception as e:
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
+    
+    session = CoachSession.query.filter_by(id=body['id']).first()
+    result = coach_session_schema.dump(session)
     
     return result
