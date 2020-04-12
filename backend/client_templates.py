@@ -1,8 +1,11 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema
+from backend.models.user import User, Role
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise
+from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
+from datetime import date
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -45,8 +48,89 @@ def getCoachTemplate(token_claims):
 @app.route("/client/template", methods=["POST"])
 @http_guard(renew=True, nullable=False)
 def createCoachTemplate(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Logged in user doesn't have a role of COACH"
+        }, 401
+    
+    body = request.get_json(force=True)
+
+    # Sanity check body data
+    if 'sessions' not in body or 'coach_template_id' not in body or 'client_id' not in body:
+        return {
+            "error": "Need to specify a valid coach_template_id (int), client_id (int) and sessions (array)"
+        }, 400
+    coach_template_id = body['coach_template_id']
+    client_id = body['client_id']
+    sessions = body['sessions']
+    if len(sessions) <= 0:
+        return {
+            "error": "Length of sessions supplied is 0"
+        }, 400
+
+    # Grab the coach template
+    coach_template = CoachTemplate.query.filter_by(id=coach_template_id).first()
+    if coach_template == None:
+        return {
+            "error": "No coach template found with coach_template_id: " + str(coach_template_id)
+        }, 404
+    # Grab the user with the client id
+    client = User.query.filter_by(id=client_id).first()
+    if client == None:
+        return {
+            "error": "No user found with user_id: " + str(client_id)
+        }, 404
+
+    # Initialize client template and fill sessions, exercises and check ins as we go
+    client_template = ClientTemplate(
+        name=coach_template.name, start_date=str(date.today()), user_id=client_id, completed=False, sessions=[]
+    )
+
+    # Iterate through sessions and create client_sessions, and client_exercises from them
+    for session in sessions:
+        coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
+        if coach_session == None:
+            return {
+                "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
+            }, 404
+
+        # Initialize a client session and fill with client_exercises
+        client_session = ClientSession(
+            name=coach_session.name, order=coach_session.order, completed=False, exercises=[], training_entries=[]
+        )
+        for coach_exercise in session['coach_exercises']:
+            exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
+            if exercise == None:
+                return {
+                    "error": "No exercise found with id: " + str(session['id'])
+                }
+
+            exercise_dump = coach_exercise_schema.dump(exercise)
+            client_session.exercises.append(
+                ClientExercise(
+                    sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
+                    category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
+                )
+            )
+        client_template.sessions.append(client_session)
+
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(client_template)
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    db.session.refresh(client_template)
+
+    result = client_template_schema.dump(client_template)
+
     return {
-        "error": "Not implemented"
+        "template": result
     }
 
 @app.route("/client/session", methods=["GET"])
