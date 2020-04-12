@@ -152,6 +152,11 @@ def createTemplate(token_claims):
 
     body = request.get_json(force=True)
 
+    if 'name' not in body:
+        return {
+            "error": "Must specify name (string))"
+        }, 400
+    
     # check if template name is available, no duplicates allowed
     check_duplicate = CoachTemplate.query.filter_by(name=body['name']).first()
 
@@ -191,6 +196,11 @@ def createSession(token_claims):
 
     body = request.get_json(force=True)
 
+    if 'coach_template_id' not in body or 'name' not in body:
+        return {
+            "error": "Must specify coach_template_id (integer) and name (string))"
+        }, 400
+    
     # check if template name is available, no duplicates allowed
     check_duplicate = CoachSession.query.filter_by(name=body['name'], coach_template_id=body['coach_template_id']).first()
 
@@ -240,6 +250,11 @@ def createCoachExercise(token_claims):
 
     body = request.get_json(force=True)
     
+    if 'coach_session_id' not in body or 'exercise_id' not in body:
+        return {
+            "error": "Must specify coach_session_id (integer) and exercise_id (integer)"
+        }, 400 
+        
     # find current max order value for sexercise belonging to the passed in coach_session_id
     max_order = db.session.query(func.max(CoachExercise.order)).filter_by(coach_session_id=body['coach_session_id']).scalar()
 
@@ -282,6 +297,10 @@ def createExercise(token_claims):
 
     body = request.get_json(force=True)
     
+    if 'name' not in body or 'category' not in body:
+        return {
+            "error": "Must specify exercise name (string) and category (string)"
+        }, 400    
     # create the new exercise with name and category
     new_exercise = Exercise(name=body['name'], category=body['category'])
     
@@ -355,28 +374,30 @@ def updateTemplate(token_claims):
 
     body = request.get_json(force=True)
 
+    if 'id' not in body or 'name' not in body or 'sessions' not in body:
+        return {
+            "error": "Must specify id (int) name (string) and sessions (array)"
+        }, 400
     # grab the template being updated
     update_template = CoachTemplate.query.filter_by(id=body['id']).first()
 
     # check if coach wants to change the template name
-    has_name = False
-    if 'name' in body:
-        # only change name if it is different than the name currently in the database
-        if body['name'] != update_template.name:
-            has_name = True
+    change_name = False
+    # only change name if it is different than the name currently in the database
+    if body['name'] != update_template.name:
+        change_name = True
 
     # grab incoming session ids
     incoming_ids = []
     for val in body['sessions']:
         incoming_ids.append(val['id'])
 
-    # print(body['sessions'][0]['order'])
     # Grab all the sessions belonging to the template being updated
     sessions = CoachSession.query.filter_by(coach_template_id=body['id'])
 
     try:
         # update template name if the coach requested it to be changed
-        if has_name == True:
+        if change_name == True:
             update_template.name = body['name']
             db.session.commit()
         # update session in CoachSessions table
@@ -391,7 +412,7 @@ def updateTemplate(token_claims):
         # if current_session_id is present in the array of sessions they’ve passed
         # Then update the order of that session
         if s.id in incoming_ids:
-            # create new template in CoachTemplate table
+            # find the correct incoming order value to update this session.order
             for x in body['sessions']:
                 if x['id'] == s.id:
                     s.order = x['order']
@@ -399,7 +420,7 @@ def updateTemplate(token_claims):
         # Else delete the current_session_id from the database
         else:
             try:
-                # create new template in CoachTemplate table
+                # delete this session
                 CoachSession.query.filter_by(id=s.id).delete()
                 db.session.commit()
             except Exception as e:
@@ -408,6 +429,7 @@ def updateTemplate(token_claims):
                 }, 500
                 raise
 
+    
     template = CoachTemplate.query.filter_by(id=body['id']).first()
     result = coach_template_schema.dump(template)
     
