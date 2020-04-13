@@ -6,6 +6,7 @@ from sqlalchemy import func
 # from sqlalchemy.orm import defer, joinedload, load_only, subqueryload, lazyload
 from backend.models.user import Role
 from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schemas, exercise_schema
+from backend.helpers.coach_templates import setNonNullCoachSessionFields, isSessionPresent
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -152,6 +153,11 @@ def createTemplate(token_claims):
 
     body = request.get_json(force=True)
 
+    if 'name' not in body:
+        return {
+            "error": "Must specify name (string))"
+        }, 400
+    
     # check if template name is available, no duplicates allowed
     check_duplicate = CoachTemplate.query.filter_by(name=body['name']).first()
 
@@ -191,6 +197,11 @@ def createSession(token_claims):
 
     body = request.get_json(force=True)
 
+    if 'coach_template_id' not in body or 'name' not in body:
+        return {
+            "error": "Must specify coach_template_id (integer) and name (string))"
+        }, 400
+    
     # check if template name is available, no duplicates allowed
     check_duplicate = CoachSession.query.filter_by(name=body['name'], coach_template_id=body['coach_template_id']).first()
 
@@ -240,6 +251,11 @@ def createCoachExercise(token_claims):
 
     body = request.get_json(force=True)
     
+    if 'coach_session_id' not in body or 'exercise_id' not in body:
+        return {
+            "error": "Must specify coach_session_id (integer) and exercise_id (integer)"
+        }, 400 
+        
     # find current max order value for sexercise belonging to the passed in coach_session_id
     max_order = db.session.query(func.max(CoachExercise.order)).filter_by(coach_session_id=body['coach_session_id']).scalar()
 
@@ -282,6 +298,10 @@ def createExercise(token_claims):
 
     body = request.get_json(force=True)
     
+    if 'name' not in body or 'category' not in body:
+        return {
+            "error": "Must specify exercise name (string) and category (string)"
+        }, 400    
     # create the new exercise with name and category
     new_exercise = Exercise(name=body['name'], category=body['category'])
     
@@ -301,4 +321,148 @@ def createExercise(token_claims):
     
     return {
         "exercises": result
+    }
+
+
+@app.route("/coach/template/delete", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def deleteTemplate(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+    }, 400
+
+    body = request.get_json(force=True)
+    id = body['coach_template_id']
+    
+    # check that the correct param is passed
+    if id == None:
+        return {
+            "error": "No query parameter coach_template_id found in request"
+        }, 400
+
+    # grab table to be deleted
+    template = CoachTemplate.query.filter_by(id=id).first()
+
+    # check that table to delte actually exists
+    if template == None:
+        return {
+            "error": "Coach_template not found with given id"
+        }
+    
+    try:
+        # Delete table from database
+        CoachTemplate.query.filter_by(id=id).delete()
+        db.session.commit()
+    except Exception as e:
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return {
+        "success": True
+    }
+
+
+@app.route("/coach/template", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def updateTemplate(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    if 'id' not in body:
+        return {
+            "error": "No parameter id found in request body"
+        }, 400
+
+    # grab the template being updated
+    coach_template = CoachTemplate.query.filter_by(id=body['id']).first()
+
+    # check if coach wants to change the template name
+    # only change name if it is different than the name currently in the database
+    if 'name' in body:
+        if body['name'] != coach_template.name:
+            coach_template.name = body['name']
+
+    # Iterate through the coach_sessions and for each session, check if it is present in the body, if it is, then update the session
+    # and insert it into coach_sessions. If it isn't present, then don't insert into coach_sessions
+    if 'sessions' in body:
+        coach_sessions = []
+        for coach_session in coach_template.sessions:
+            present, index = isSessionPresent(coach_session, body['sessions'])
+            if present:
+                setNonNullCoachSessionFields(coach_session, body['sessions'][index])
+                coach_sessions.append(coach_session)
+        # add sessions to tempalte.sessions
+        coach_template.sessions = coach_sessions
+                
+    try:
+        db.session.commit()
+        db.session.refresh(coach_template)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return {
+        "template": coach_template_schema.dump(coach_template)
+    }
+
+
+@app.route("/coach/session", methods=['PUT'])
+@http_guard(renew=True, nullable=False)
+def updateSession(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Expected role of COACH"
+        }, 400
+
+    body = request.get_json(force=True)
+
+    if 'id' not in body:
+        return {
+            "error": "No parameter id found in request body"
+        }, 400
+
+    # grab the session being updated
+    coach_session = CoachSession.query.get(body['id'])
+    
+    if coach_session == None:
+        return {
+            "error": "No coach session found with supplied id"
+        }, 404
+
+    # Update the session metadata that the request has asked for, handle updating client_exercises separately
+    setNonNullCoachSessionFields(coach_session, body)
+
+    # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
+    if 'coach_exercises' in body:
+        coach_exercises = []
+        for coach_exercise in body['coach_exercises']:
+            coach_exercises.append(
+                CoachExercise(
+                    exercise_id=coach_exercise['exercise_id'], coach_session_id=coach_exercise['coach_session_id'], order=coach_exercise['order']
+                )
+            )
+        coach_session.coach_exercises = coach_exercises
+
+    try:
+        db.session.commit()
+        db.session.refresh(coach_session)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return  {
+        "session": coach_session_schema.dump(coach_session)
     }
