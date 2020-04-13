@@ -341,6 +341,246 @@ def test_post_client_template(client, db_session):
 
 #  ----------------- HELPER METHODS -------------------
 
+#  ----------------- CLIENT TEMPLATES -----------------
+def test_get_client_template(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_client_template_model()
+    template.user_id = user['user']['id']
+    db.session.add(template)
+    db.session.commit()
+    db.session.refresh(template)
+
+    # Retrieve template using api
+    url = '/client/template?id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
+def test_get_client_templates(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create 2 templates for multiple template retrieval
+    template1 = generate_client_template_model()
+    template2 = generate_client_template_model()
+    template1.user_id = user['user']['id']
+    template2.user_id = user['user']['id']
+    db.session.add(template1)
+    db.session.add(template2)
+    db.session.commit()
+    db.session.refresh(template1)
+    db.session.refresh(template2)
+
+    url = '/client/templates?user_id={}'.format(str(user['user']['id']))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert len(resp['templates']) == 2
+    assert resp['templates'][0]['id'] == template1.id or resp['templates'][0]['id'] == template2.id
+    assert resp['templates'][1]['id'] == template1.id or resp['templates'][1]['id'] == template2.id
+
+def test_post_client_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+def test_put_client_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert client_template != None
+    assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
+
+    # Change name of template and ordering or sessions
+    # TODO: Need to test deleting a session through this endpoint. Getting make_transient error
+    data = {
+        'id': 1,
+        'name': 'Test Template Name Change',
+        'sessions': [
+            {
+                'id': client_template['sessions'][0]['id'],
+                'name': 'Test Session Name Change 2',
+                'order': 2
+            },
+            {
+                'id': client_template['sessions'][1]['id'],
+                'name': 'Test Session Name Change 1',
+                'order': 1
+            }
+        ]
+    }
+
+    updated_client_template, code = request(client, "PUT", '/client/template', data=data)
+    assert updated_client_template != None and code == 200
+    assert updated_client_template['name'] == 'Test Template Name Change'
+    assert len(updated_client_template['sessions']) == 2
+    assert updated_client_template['sessions'][0]['name'] == 'Test Session Name Change 1' and updated_client_template['sessions'][0]['id'] == data['sessions'][1]['id']
+    assert updated_client_template['sessions'][1]['name'] == 'Test Session Name Change 2' and updated_client_template['sessions'][1]['id'] == data['sessions'][0]['id']
+
+def test_get_client_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert client_template != None
+    assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
+
+    # Retrieve a particular session from the client template
+    url = '/client/session?template_id={}&session_id={}'.format(client_template['id'], client_template['sessions'][0]['id'])
+    client_session, code = request(client, 'GET', url)
+    assert code == 200
+    assert client_session != None
+    assert client_session['id'] == client_template['sessions'][0]['id']
+
+def test_post_client_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert client_template != None
+    assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
+    assert len(client_template['sessions']) == 2
+
+    data = {
+        'client_template_id': client_template['id'],
+        'name': 'Feet Day',
+        'exercises': [
+            {
+                "name": "Tip Toe",
+                "category": "Arch",
+                "sets": 3,
+                "reps": 15,
+                "weight": 150,
+                "order": 1
+		    },
+        ]
+    }
+
+    # Test creating a client session as a coach (exercises should be added into exercises)
+    client_session_1, code = request(client, "POST", '/client/session', data=data)
+    assert code == 200
+    assert client_session_1['name'] == 'Feet Day'
+    assert len(client_session_1['exercises']) == 1 and len(client_session_1['training_entries']) == 0
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    client_session_2, code = request(client, "POST", '/client/session', data=data)
+    assert code == 200
+    assert client_session_2['name'] == 'Feet Day'
+    assert len(client_session_2['exercises']) == 0 and len(client_session_2['training_entries']) == 1
+
+
+
+def test_put_client_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert client_template != None
+    assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
+
+    # Update a particular client session, we will update the first client session
+    data = {
+        'id': client_template['sessions'][0]['id'],
+        'name': 'Client session name change',
+        'exercises': [
+            {
+                "name": "Deadlifts",
+                "category": "Lower Back",
+                "sets": 1,
+                "reps": 1,
+                "weight": 100,
+                "order": 1
+		    }
+        ]
+    }
+
+    resp, code = request(client, "PUT", '/client/session', data=data)
+    assert code == 200
+    assert resp != None
+    assert len(resp['exercises']) == 1
+    assert resp['name'] == 'Client session name change'
+
+#  ----------------- HELPER METHODS -------------------
+
 # sign up a user. It returns the user response. It also error checks
 def sign_up_user_for_testing(client, user):
     mimetype = 'application/json'
@@ -415,8 +655,11 @@ def generate_client_template_model():
         ]
     )
 
+# This method generates a CoachTemplate model and adds the corresponding exercises to the database.
+# The CoachTemplate will have 2 coach sessions with 2 exercises each
 def generate_coach_template_model(db_session):
     db_session.add(Exercise(id=1, category='Lower Back', name='Deadlifts'))
+    db_session.add(Exercise(id=2, category='Latisimus Dorsi', name='Pullups'))
     db_session.commit()
     return CoachTemplate(
         id=1, name='Test Coach Template', sessions=[
@@ -426,12 +669,53 @@ def generate_coach_template_model(db_session):
                         exercise_id=1, order=1
                     ),
                     CoachExercise(
+                        exercise_id=2, order=1
+                    )
+                ]
+            ),
+            CoachSession(
+                name='Test Session 2', order=2, coach_exercises=[
+                    CoachExercise(
                         exercise_id=1, order=1
+                    ),
+                    CoachExercise(
+                        exercise_id=2, order=1
                     )
                 ]
             )
         ]
     )
+
+# This method creates a client template by first creating a coach_template, then assigning it to a client.
+# It returns (response, code, coach_template)
+def create_client_template(client, db_session, client_id):
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model(db_session)
+    db.session.add(coach_template)
+    db.session.commit()
+    db.session.refresh(coach_template)
+    
+    # Create a client template using this coach template and assign it to the client
+    data = {
+        'coach_template_id': coach_template.id,
+        'client_id': client_id,
+        'sessions': []
+    }
+    # Specify the sets, reps and weight of the coach exercises within the sessions
+    for coach_session in coach_template.sessions:
+        session = {'id': coach_session.id, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'id': coach_exercise.id,
+                'sets': 5,
+                'reps': 5,
+                'weight': 315
+            })
+        data['sessions'].append(session)
+
+    resp, code = request(client, "POST", '/client/template', data=data)
+    return resp, code, coach_template
+    
 
 # # a method to get the current user id
 # # there is probably a better way to do this 
