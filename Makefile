@@ -5,7 +5,7 @@ test:
 	pytest
 
 test-cov:
-	pytest --cov=backend
+	pytest --cov=backend --cov-report html
 
 run-dev:
 	sed -i '' '/^DATABASE_URL/d' .env
