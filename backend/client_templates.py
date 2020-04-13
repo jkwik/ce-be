@@ -42,9 +42,7 @@ def getClientTemplate(token_claims):
 
     templateResult = client_template_schema.dump(template)
 
-    return {
-        "template": templateResult
-    }
+    return templateResult
 
 @app.route("/client/template", methods=["POST"])
 @http_guard(renew=True, nullable=False)
@@ -130,9 +128,7 @@ def createClientTemplate(token_claims):
 
     result = client_template_schema.dump(client_template)
 
-    return {
-        "template": result
-    }
+    return result
 
 @app.route("/client/template", methods=["PUT"])
 @http_guard(renew=True, nullable=False)
@@ -176,9 +172,7 @@ def updateClientTemplate(token_claims):
         }, 500
         raise
 
-    return {
-        "template": client_template_schema.dump(client_template)
-    }
+    return client_template_schema.dump(client_template)
 
 @app.route("/client/session", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -203,9 +197,7 @@ def getClientSession(token_claims):
 
     sessionResult = client_session_schema.dump(session)
 
-    return {
-        "session": sessionResult
-    }
+    return sessionResult
 
 @app.route("/client/session", methods=["POST"])
 @http_guard(renew=True, nullable=False)
@@ -268,9 +260,7 @@ def createClientSession(token_claims):
     
     result = client_session_schema.dump(client_session)
 
-    return {
-        "session": result
-    }
+    return result
 
 @app.route("/client/session", methods=["PUT"])
 @http_guard(renew=True, nullable=False)
@@ -325,6 +315,4 @@ def updateClientSession(token_claims):
         }, 500
         raise
 
-    return  {
-        "session": client_session_schema.dump(client_session)
-    }
+    return client_session_schema.dump(client_session)
