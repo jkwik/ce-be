@@ -213,27 +213,34 @@ def test_forgot_password(client, db_session):
 
 
 
-# def test_terminate_client(client):
-#     new_coach = create_new_coach()
-#     new_user = create_new_user(True, True)
-#     user_id = get_user_id()
-#     new_user_data = user_schema.dump(new_user)
-#     coach_signup_rv = sign_up_user_for_testing(client, new_coach)
-#     coach_login_rv = login_user_for_testing(client, new_coach)
-#     client_signup_rv = sign_up_user_for_testing(client, new_user)
+def test_terminate_client(client, db_session):
+    #sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
 
-#     # url = "/terminateClient?id={}".format(user_id)
-#     # terminate_client_rv = client.put(url)
-#     assert True
+    # sign up a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # remove a client
+    data = {
+        "id": client_user['user']['id']
+    }
+
+    resp, code = request(client, "PUT", '/terminateClient', data=data)
+    assert code == 200 and resp != None
+    assert resp['user']['approved'] == None
+
+
 
 # def test_get_user(client):
-#     new_user = create_new_user()
-#     signup_rv = sign_up_user_for_testing(client, new_user)
-#     user_id = get_user_id()
-#     url = '/getUser?id={}'.format(user_id)
-#     get_user_rv = client.get(url)
-#     expected_json = {'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'id': user_id, 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False}}
-#     assert get_user_rv.json == expected_json
+    
 
 #  ----------------- CLIENT TEMPLATES -----------------
 def test_get_client_template(client, db_session):
