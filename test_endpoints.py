@@ -7,7 +7,7 @@ import unittest
 from backend import app, db
 from backend.models.user import User, UserSchema, user_schema, Role
 from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise
-from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise
+from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 
@@ -250,7 +250,7 @@ def test_get_client_template(client, db_session):
     resp, code = request(client, "GET", url)
     assert code == 200
     assert resp != None
-    assert resp['template']['id'] == template.id
+    assert resp['id'] == template.id
 
 def test_get_client_templates(client, db_session):
     # Create and sign into the client
@@ -281,29 +281,49 @@ def test_get_client_templates(client, db_session):
 
 def test_post_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
-    user = sign_up_user_for_testing(client, test_coach)
-    assert user['user'] != None
-    assert user['user']['role'] == 'COACH'
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
 
-    user = sign_up_user_for_testing(client, test_client)
-    assert user['user'] != None
-    assert user['user']['role'] == 'CLIENT'
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
+    # Sign in as the coach
     login_resp = login_user_for_testing(client, test_coach)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
     # Create a coach template to assign to a client
-    coach_template = generate_coach_template_model()
+    coach_template = generate_coach_template_model(db_session)
     db.session.add(coach_template)
     db.session.commit()
     db.session.refresh(coach_template)
     
     # Create a client template using this coach template
-    resp, code = request(client, "POST", data={
-        
-    })
+    data = {
+        'coach_template_id': coach_template.id,
+        'client_id': client_user['user']['id'],
+        'sessions': []
+    }
+    # Specify the sets, reps and weight of the coach exercises within the sessions
+    for coach_session in coach_template.sessions:
+        session = {'id': coach_session.id, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'id': coach_exercise.id,
+                'sets': 5,
+                'reps': 5,
+                'weight': 315
+            })
+        data['sessions'].append(session)
 
-    assert True
+    resp, code = request(client, "POST", '/client/template', data=data)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+# def test_put_client_template(client, db_session):
+
 
 #  ----------------- HELPER METHODS -------------------
 
@@ -379,7 +399,9 @@ def generate_client_template_model():
         ]
     )
 
-def generate_coach_template_model():
+def generate_coach_template_model(db_session):
+    db_session.add(Exercise(id=1, category='Lower Back', name='Deadlifts'))
+    db_session.commit()
     return CoachTemplate(
         id=1, name='Test Coach Template', sessions=[
             CoachSession(
