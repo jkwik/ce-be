@@ -6,6 +6,8 @@ import pdb
 import unittest
 from backend import app, db
 from backend.models.user import User, UserSchema, user_schema, Role
+from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise
+from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 
@@ -226,6 +228,81 @@ def test_client_list(client, db_session):
 #     )    
 #     return user
 
+#  ----------------- CLIENT TEMPLATES -----------------
+def test_get_client_template(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_client_template_model()
+    template.user_id = user['user']['id']
+    db.session.add(template)
+    db.session.commit()
+    db.session.refresh(template)
+
+    # Retrieve template using api
+    url = '/client/template?id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['template']['id'] == template.id
+
+def test_get_client_templates(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create 2 templates for multiple template retrieval
+    template1 = generate_client_template_model()
+    template2 = generate_client_template_model()
+    template1.user_id = user['user']['id']
+    template2.user_id = user['user']['id']
+    db.session.add(template1)
+    db.session.add(template2)
+    db.session.commit()
+    db.session.refresh(template1)
+    db.session.refresh(template2)
+
+    url = '/client/templates?user_id={}'.format(str(user['user']['id']))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert len(resp['templates']) == 2
+    assert resp['templates'][0]['id'] == template1.id or resp['templates'][0]['id'] == template2.id
+    assert resp['templates'][1]['id'] == template1.id or resp['templates'][1]['id'] == template2.id
+
+def test_post_client_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    user = sign_up_user_for_testing(client, test_coach)
+    assert user['user'] != None
+    assert user['user']['role'] == 'COACH'
+
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model()
+    db.session.add(coach_template)
+    db.session.commit()
+    db.session.refresh(coach_template)
+    pdb.set_trace()
+
+    assert True
+
+#  ----------------- HELPER METHODS -------------------
+
 # sign up a user. It returns the user response. It also error checks
 def sign_up_user_for_testing(client, user):
     mimetype = 'application/json'
@@ -284,6 +361,35 @@ def login_user_for_testing(client, user):
     assert resp._status_code == 200
 
     return resp.json
+
+def generate_client_template_model():
+    return ClientTemplate(
+        name='Test Client Template', start_date='2020-12-12', completed=False, sessions=[
+            ClientSession(
+                name='Test Session 1', order=1, completed=False, exercises=[
+                    ClientExercise(
+                        sets=3, reps=12, weight=225, category='Lower Back', name='Deadlifts', order=1
+                    )
+                ]
+            )
+        ]
+    )
+
+def generate_coach_template_model():
+    return CoachTemplate(
+        id=1, name='Test Coach Template', sessions=[
+            CoachSession(
+                name='Test Session 1', order=1, coach_exercises=[
+                    CoachExercise(
+                        exercise_id=1, order=1
+                    ),
+                    CoachExercise(
+                        exercise_id=1, order=1
+                    )
+                ]
+            )
+        ]
+    )
 
 # # a method to get the current user id
 # # there is probably a better way to do this 
