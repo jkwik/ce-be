@@ -398,9 +398,7 @@ def updateTemplate(token_claims):
             if present:
                 setNonNullCoachSessionFields(coach_session, body['sessions'][index])
                 coach_sessions.append(coach_session)
-        # Set the coach_templates sessions to the new array of CoachSessions. By committing these new sessions,
-        # sqlalchemy handles delete the sessions that aren't present in the updated array, and updating those
-        # that are present in the updated array
+        # add sessions to tempalte.sessions
         coach_template.sessions = coach_sessions
                 
     try:
@@ -428,57 +426,43 @@ def updateSession(token_claims):
 
     body = request.get_json(force=True)
 
-    if 'id' not in body or 'name' not in body or 'order' not in body or 'coach_template_id' not in body or 'coach_exercises' not in body:
+    if 'id' not in body:
         return {
-            "error": "Must specify id (int), name (string), order (int), coach_template_id (int), coach_exercises (array)"
+            "error": "No parameter id found in request body"
         }, 400
+
     # grab the session being updated
-    update_session = CoachSession.query.filter_by(id=body['id']).first()
-
-    # check if coach wants to change the template name
-    # only change name if it is different than the name currently in the database
-    if body['name'] != update_session.name:
-        try:
-            # update template name if the coach requested it to be changed
-            update_session.name = body['name']
-            db.session.commit()
-            # update session in CoachSessions table
-        except Exception as e:
-            return {
-                "error": "Internal Server Error"
-            }, 500
-            raise
-
+    coach_session = CoachSession.query.get(body['id'])
     
-    # get all coach exercies belonging to the coach session being updated
-    exercises = CoachExercise.query.filter_by(coach_session_id=body['id'])
+    if coach_session == None:
+        return {
+            "error": "No coach session found with supplied id"
+        }, 404
 
-    # for each exercise currently belonging to the coach session being updated
-    for exercise in exercises:
-        try:
-            # delete all current coach exercises belonging to the coach session being updated
-            CoachExercise.query.filter_by(id=exercise.id).delete()
-            db.session.commit()
-        except Exception as e:
-            return {
-                "error": "Internal Server Error"
-            }, 500
-            raise
-        
-    # for each coach exercise passed in
-    for exercise_passed in body['coach_exercises']:
-        new_exercise = CoachExercise(exercise_id=exercise_passed['exercise_id'], coach_session_id=exercise_passed['coach_session_id'], order=exercise_passed['order'])
-        try:
-            # create a coach exercise
-            db.session.add(new_exercise)
-            db.session.commit()
-        except Exception as e:
-            return {
-                "error": "Internal Server Error"
-            }, 500
-            raise
-    
-    session = CoachSession.query.filter_by(id=body['id']).first()
-    result = coach_session_schema.dump(session)
-    
-    return result
+    # Update the session metadata that the request has asked for, handle updating client_exercises separately
+    setNonNullCoachSessionFields(coach_session, body)
+
+    # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
+    if 'coach_exercises' in body:
+        coach_exercises = []
+        for coach_exercise in body['coach_exercises']:
+            coach_exercises.append(
+                CoachExercise(
+                    exercise_id=coach_exercise['exercise_id'], coach_session_id=coach_exercise['coach_session_id'], order=coach_exercise['order']
+                )
+            )
+        coach_session.coach_exercises = coach_exercises
+
+    try:
+        db.session.commit()
+        db.session.refresh(coach_session)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    return  {
+        "session": coach_session_schema.dump(coach_session)
+    }
