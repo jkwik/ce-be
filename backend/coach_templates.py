@@ -17,14 +17,14 @@ def coachTemplates(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+    }, 400
 
     templates = CoachTemplate.query.all()
 
     if templates == None:
         return {
             "error": "There are no Coach_templates"
-        }, 404
+        }
 
     result = coach_template_schemas.dump(templates)
 
@@ -40,7 +40,7 @@ def coachTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+    }, 400
 
     id = request.args.get('coach_template_id')
     
@@ -54,7 +54,7 @@ def coachTemplate(token_claims):
     if template == None:
         return {
             "error": "Coach_template not found with given id: " + id
-        }, 404
+        }
 
     result = coach_template_schema.dump(template)
     
@@ -155,7 +155,7 @@ def createTemplate(token_claims):
 
     if 'name' not in body:
         return {
-            "error": "Must specify name (string)"
+            "error": "Must specify name (string))"
         }, 400
     
     # check if template name is available, no duplicates allowed
@@ -240,6 +240,7 @@ def createSession(token_claims):
     
     return result
 
+
 @app.route("/exercise", methods=['POST'])
 @http_guard(renew=True, nullable=False)
 def createExercise(token_claims):
@@ -282,15 +283,15 @@ def deleteTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+    }, 400
 
     body = request.get_json(force=True)
-    id = body['id']
+    id = body['coach_template_id']
     
     # check that the correct param is passed
     if id == None:
         return {
-            "error": "No query parameter id found in request"
+            "error": "No query parameter coach_template_id found in request"
         }, 400
 
     # grab table to be deleted
@@ -363,10 +364,7 @@ def updateTemplate(token_claims):
         }, 500
         raise
 
-    
-    return {
-        "template": coach_template_schema.dump(coach_template)
-    }
+    return coach_template_schema.dump(coach_template)
 
 
 @app.route("/coach/session", methods=['PUT'])
@@ -416,6 +414,4 @@ def updateSession(token_claims):
         }, 500
         raise
 
-    return  {
-        "session": coach_session_schema.dump(coach_session)
-    }
+    return coach_session_schema.dump(coach_session)
