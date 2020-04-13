@@ -22,6 +22,7 @@ setup(
         'flask-mail',
         'pytest',
         'pytest-flask',
-        'pytest-flask-sqlalchemy'
+        'pytest-flask-sqlalchemy',
+        'pytest-cov'
     ],
 )

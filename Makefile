@@ -4,6 +4,9 @@ install:
 test:
 	pytest
 
+test-cov:
+	pytest --cov=backend
+
 run-dev:
 	sed -i '' '/^DATABASE_URL/d' .env
 	heroku config:get --app coach-easy-deploy DATABASE_URL -s  >> .env
