@@ -239,7 +239,26 @@ def test_terminate_client(client, db_session):
 
 
 
-# def test_get_user(client):
+def test_get_user(client, db_session):
+    #sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # sign up a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # get client
+    url = '/getUser?id={}'.format(client_user['user']['id'])
+    resp, code = request(client, "GET", url)
+    assert code == 200 and resp != None
+    assert resp['user']['id'] == client_user['user']['id']
     
 
 #  ----------------- CLIENT TEMPLATES -----------------
