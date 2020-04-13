@@ -241,53 +241,6 @@ def createSession(token_claims):
     return result
 
 
-@app.route("/coach/exercise", methods=['POST'])
-@http_guard(renew=True, nullable=False)
-def createCoachExercise(token_claims):
-    if token_claims['role'] != Role.COACH.name:
-        return {
-            "error": "Expected role of COACH"
-        }, 400
-
-    body = request.get_json(force=True)
-    
-    if 'coach_session_id' not in body or 'exercise_id' not in body:
-        return {
-            "error": "Must specify coach_session_id (integer) and exercise_id (integer)"
-        }, 400 
-        
-    # find current max order value for sexercise belonging to the passed in coach_session_id
-    max_order = db.session.query(func.max(CoachExercise.order)).filter_by(coach_session_id=body['coach_session_id']).scalar()
-
-    # if no sessions exist for this template, the newly created session will have order = 1
-    if max_order is None:
-        max_order = 1
-    else:
-        # increment the order by 1
-        max_order += 1
-
-    # create the new coach exercise with coach_exercise_id, coach_session_id, and order
-    new_exercise = CoachExercise(exercise_id=body['exercise_id'], coach_session_id=body['coach_session_id'], order=max_order)
-    
-    try:
-        # create new template in CoachTemplate table
-        db.session.add(new_exercise)
-        db.session.commit()
-    except Exception as e:
-        return {
-            "error": "Internal Server Error"
-        }, 500
-        raise
-
-    # retrieve created exercises
-    exercises = CoachExercise.query.filter_by(coach_session_id=body['coach_session_id'])
-
-    result = coach_exercise_schemas.dump(exercises)
-    
-    return {
-        "session_exercises": result
-    }
-
 @app.route("/exercise", methods=['POST'])
 @http_guard(renew=True, nullable=False)
 def createExercise(token_claims):
@@ -411,9 +364,7 @@ def updateTemplate(token_claims):
         }, 500
         raise
 
-    return {
-        "template": coach_template_schema.dump(coach_template)
-    }
+    return coach_template_schema.dump(coach_template)
 
 
 @app.route("/coach/session", methods=['PUT'])
@@ -463,6 +414,4 @@ def updateSession(token_claims):
         }, 500
         raise
 
-    return  {
-        "session": coach_session_schema.dump(coach_session)
-    }
+    return coach_session_schema.dump(coach_session)
