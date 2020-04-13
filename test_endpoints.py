@@ -297,7 +297,11 @@ def test_post_client_template(client, db_session):
     db.session.add(coach_template)
     db.session.commit()
     db.session.refresh(coach_template)
-    pdb.set_trace()
+    
+    # Create a client template using this coach template
+    resp, code = request(client, "POST", data={
+        
+    })
 
     assert True
 
