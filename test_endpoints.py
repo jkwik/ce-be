@@ -4,7 +4,7 @@ import pytest
 import json
 import pdb
 import unittest
-from backend import app, db
+from backend import app, db, bcrypt
 from backend.models.user import User, UserSchema, user_schema, Role
 from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
@@ -163,35 +163,28 @@ def test_client_list(client, db_session):
     assert len(clients_resp['pastClients']) != 0
 
 def test_update_profile(client, db_session):
-    # sign up user
-    resp = sign_up_user_for_testing(client, test_client)
-    assert user['user'] != None
-    assert resp['user']['first_name'] == 'backend_tests_client'
+    # sign up as client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
-    # Sign as user
+    # login as client
     login_resp = login_user_for_testing(client, test_client)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
-    # grab the user
-    user = User.query.filter_by(email=resp['user']['email']).first()
-    # change first_name
+    data = {
+        'first_name': 'changed first name',
+        'last_name': 'changed last name',
+        'email': 'changed@email.com'
+    }
 
+    # make updates
+    resp, code = request(client, "PUT", '/updateProfile', data=data)
+    assert resp != None and code == 200
+    assert resp['user']['first_name'] == 'changed first name'
+    assert resp['user']['last_name'] == 'changed last name'
+    assert resp['user']['email'] == 'changed@email.com'
 
-    db_session.commit()
-
-
-
-# def test_verify_user(client):
-#     assert True
-
-# def test_login(client):
-#     # have to create new user since changes to database are reverted after every test
-#     new_user = create_new_user()
-#     signup_rv = sign_up_user_for_testing(client, new_user)
-#     login_rv = login_user_for_testing(client, new_user)
-
-#     del login_rv.json['user']['id']
-#     assert login_rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
 
 # def test_logout(client):
 #     new_user = create_new_user()
@@ -200,11 +193,25 @@ def test_update_profile(client, db_session):
 #     logout_rv = client.get("auth/logout")
 #     assert logout_rv.json == {'success': True}
 
-# def test_forgot_password(client):
-#     assert True
+def test_forgot_password(client, db_session):
+     # sign up as client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['email'] == 'test@client.com'
+
+    # pass email to endpoint
+    url = '/forgotPassword&email={}'.format(client_user['user']['email'])
+    resp, code = request(client, "GET", url)
+
+    assert code == 200 and resp != None
+    assert resp['success'] == True
+
+
 
 # def test_reset_password(client):
 #     assert True
+
+
 
 # def test_terminate_client(client):
 #     new_coach = create_new_coach()
@@ -227,22 +234,6 @@ def test_update_profile(client, db_session):
 #     get_user_rv = client.get(url)
 #     expected_json = {'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'id': user_id, 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False}}
 #     assert get_user_rv.json == expected_json
-
-# def create_new_coach():
-#     body = {
-#     'first_name': 'coach_first',
-#     'last_name': 'coach_last',
-#     'email': 'coach@gmail.com',
-#     'password': 'password',
-#     'role': 'COACH'
-#     }
-#     user = User(
-#         first_name=body['first_name'], last_name=body['last_name'],
-#         email=body['email'], password=body['password'],
-#         approved=False, role=body['role'],
-#         verified=False
-#     )    
-#     return user
 
 #  ----------------- CLIENT TEMPLATES -----------------
 def test_get_client_template(client, db_session):
@@ -378,6 +369,8 @@ def request(client, method, url, data=None):
         resp = client.get(url)
     elif method == "POST":
         resp = client.post(url, data=json.dumps(data), headers=headers)
+    elif method == "PUT":
+        resp = client.put(url, data=json.dumps(data), headers=headers)
 
     return resp.json, resp._status_code
 
