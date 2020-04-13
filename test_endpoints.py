@@ -160,8 +160,24 @@ def test_client_list(client, db_session):
     assert len(clients_resp['unapprovedClients']) != 0
     assert len(clients_resp['pastClients']) != 0
 
-# def test_update_profile(client):
-#     assert True
+def test_update_profile(client, db_session):
+    # sign up user
+    resp = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert resp['user']['first_name'] == 'backend_tests_client'
+
+    # Sign as user
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # grab the user
+    user = User.query.filter_by(email=resp['user']['email']).first()
+    # change first_name
+
+
+    db_session.commit()
+
+
 
 # def test_verify_user(client):
 #     assert True
