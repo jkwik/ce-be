@@ -72,7 +72,7 @@ class CoachTemplate(db.Model):
     __tablename__ = "Coach_templates"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String, primary_key=True)
+    name = db.Column(db.String, nullable=False)
     # 1 to many relationship with Coach_sessions table
     sessions = db.relationship('CoachSession', cascade="all, delete-orphan", lazy=True, order_by="CoachSession.order")
 
