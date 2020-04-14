@@ -396,7 +396,7 @@ def updateSession(token_claims):
         return {
             "error": "No parameter id found in request body"
         }, 400
-
+    
     # grab the session being updated
     coach_session = CoachSession.query.get(body['id'])
     

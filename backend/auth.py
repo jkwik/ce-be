@@ -137,7 +137,7 @@ def forgotPassword():
 
     # create a reset token and set it to be this user's reset token
     resetToken = uuid.uuid1()
-    user.reset_token = resetToken
+    user.reset_token = str(resetToken)
     db.session.commit()
 
     # send forgot password email to the user

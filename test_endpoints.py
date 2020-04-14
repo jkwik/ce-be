@@ -4,7 +4,7 @@ import pytest
 import json
 import pdb
 import unittest
-from backend import app, db
+from backend import app, db, bcrypt
 from backend.models.user import User, UserSchema, user_schema, Role
 from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
@@ -162,20 +162,29 @@ def test_client_list(client, db_session):
     assert len(clients_resp['unapprovedClients']) != 0
     assert len(clients_resp['pastClients']) != 0
 
-# def test_update_profile(client):
-#     assert True
+def test_update_profile(client, db_session):
+    # sign up as client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
-# def test_verify_user(client):
-#     assert True
+    # login as client
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
-# def test_login(client):
-#     # have to create new user since changes to database are reverted after every test
-#     new_user = create_new_user()
-#     signup_rv = sign_up_user_for_testing(client, new_user)
-#     login_rv = login_user_for_testing(client, new_user)
+    data = {
+        'first_name': 'changed first name',
+        'last_name': 'changed last name',
+        'email': 'changed@email.com'
+    }
 
-#     del login_rv.json['user']['id']
-#     assert login_rv.json == { 'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False }}
+    # make updates
+    resp, code = request(client, "PUT", '/updateProfile', data=data)
+    assert resp != None and code == 200
+    assert resp['user']['first_name'] == 'changed first name'
+    assert resp['user']['last_name'] == 'changed last name'
+    assert resp['user']['email'] == 'changed@email.com'
+
 
 # def test_logout(client):
 #     new_user = create_new_user()
@@ -184,49 +193,186 @@ def test_client_list(client, db_session):
 #     logout_rv = client.get("auth/logout")
 #     assert logout_rv.json == {'success': True}
 
-# def test_forgot_password(client):
-#     assert True
+# forgot password and reset password have to be tested in the same endpoint because all db transactions are
+# rolled back after the test ends (the user will lose their reset_token)
+def test_forgot_password_flow(client, db_session):
+     # sign up as client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['email'] == 'test@client.com'
+    assert client_user['user']['reset_token'] == None
 
-# def test_reset_password(client):
-#     assert True
+    # pass email to endpoint
+    url = '/forgotPassword?email={}'.format(client_user['user']['email'])
+    resp, code = request(client, "GET", url)
+    assert code == 200 and resp != None
+    assert resp['success'] == True
 
-# def test_terminate_client(client):
-#     new_coach = create_new_coach()
-#     new_user = create_new_user(True, True)
-#     user_id = get_user_id()
-#     new_user_data = user_schema.dump(new_user)
-#     coach_signup_rv = sign_up_user_for_testing(client, new_coach)
-#     coach_login_rv = login_user_for_testing(client, new_coach)
-#     client_signup_rv = sign_up_user_for_testing(client, new_user)
+    # check to see that a reset token was created for the user
+    user = User.query.get(client_user['user']['id'])
+    assert user != None
+    assert user.reset_token != None
 
-#     # url = "/terminateClient?id={}".format(user_id)
-#     # terminate_client_rv = client.put(url)
-#     assert True
+    # reset the users password with the generated reset_token and a new password
+    data = {
+        'password': 'testchangepassword',
+        'reset_token': user.reset_token
+    }
+    resp, code = request(client, "POST", 'resetPassword', data=data)
+    assert code == 200 and resp != None
+    assert resp['success'] == True
 
-# def test_get_user(client):
-#     new_user = create_new_user()
-#     signup_rv = sign_up_user_for_testing(client, new_user)
-#     user_id = get_user_id()
-#     url = '/getUser?id={}'.format(user_id)
-#     get_user_rv = client.get(url)
-#     expected_json = {'user': {'approved': False, 'check_in': None, 'coach_id': None, 'email': 'test@gmail.com', 'first_name': 'test_first', 'id': user_id, 'last_name': 'test_last', 'reset_token': None, 'role': 'CLIENT', 'verified': False}}
-#     assert get_user_rv.json == expected_json
+    # Query the user again and check that the password has changed.
+    # TODO: Refreshing doesn't work for some reason
+    user = User.query.get(client_user['user']['id'])
+    assert bcrypt.check_password_hash(user.password, data['password'].encode(encoding='utf-8'))
 
-# def create_new_coach():
-#     body = {
-#     'first_name': 'coach_first',
-#     'last_name': 'coach_last',
-#     'email': 'coach@gmail.com',
-#     'password': 'password',
-#     'role': 'COACH'
-#     }
-#     user = User(
-#         first_name=body['first_name'], last_name=body['last_name'],
-#         email=body['email'], password=body['password'],
-#         approved=False, role=body['role'],
-#         verified=False
-#     )    
-#     return user
+def test_terminate_client(client, db_session):
+    #sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # sign up a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # remove a client
+    data = {
+        "id": client_user['user']['id']
+    }
+
+    resp, code = request(client, "PUT", '/terminateClient', data=data)
+    assert code == 200 and resp != None
+    assert resp['user']['approved'] == None
+
+
+
+def test_get_user(client, db_session):
+    #sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # sign up a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # get client
+    url = '/getUser?id={}'.format(client_user['user']['id'])
+    resp, code = request(client, "GET", url)
+    assert code == 200 and resp != None
+    assert resp['user']['id'] == client_user['user']['id']
+    
+
+#  ----------------- CLIENT TEMPLATES -----------------
+def test_get_client_template(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_client_template_model()
+    template.user_id = user['user']['id']
+    db.session.add(template)
+    db.session.commit()
+    db.session.refresh(template)
+
+    # Retrieve template using api
+    url = '/client/template?id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
+def test_get_client_templates(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create 2 templates for multiple template retrieval
+    template1 = generate_client_template_model()
+    template2 = generate_client_template_model()
+    template1.user_id = user['user']['id']
+    template2.user_id = user['user']['id']
+    db.session.add(template1)
+    db.session.add(template2)
+    db.session.commit()
+    db.session.refresh(template1)
+    db.session.refresh(template2)
+
+    url = '/client/templates?user_id={}'.format(str(user['user']['id']))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert len(resp['templates']) == 2
+    assert resp['templates'][0]['id'] == template1.id or resp['templates'][0]['id'] == template2.id
+    assert resp['templates'][1]['id'] == template1.id or resp['templates'][1]['id'] == template2.id
+
+def test_post_client_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model(db_session, 1)
+    db.session.add(coach_template)
+    db.session.commit()
+    db.session.refresh(coach_template)
+    
+    # Create a client template using this coach template
+    data = {
+        'coach_template_id': coach_template.id,
+        'client_id': client_user['user']['id'],
+        'sessions': []
+    }
+    # Specify the sets, reps and weight of the coach exercises within the sessions
+    for coach_session in coach_template.sessions:
+        session = {'id': coach_session.id, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'id': coach_exercise.id,
+                'sets': 5,
+                'reps': 5,
+                'weight': 315
+            })
+        data['sessions'].append(session)
+
+    resp, code = request(client, "POST", '/client/template', data=data)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+# def test_put_client_template(client, db_session):
+
+
+#  ----------------- HELPER METHODS -------------------
 
 #  ----------------- CLIENT TEMPLATES -----------------
 def test_get_client_template(client, db_session):
@@ -544,29 +690,29 @@ def generate_client_template_model():
 
 # This method generates a CoachTemplate model and adds the corresponding exercises to the database.
 # The CoachTemplate will have 2 coach sessions with 2 exercises each
-def generate_coach_template_model(db_session):
-    db_session.add(Exercise(id=1, category='Lower Back', name='Deadlifts'))
-    db_session.add(Exercise(id=2, category='Latisimus Dorsi', name='Pullups'))
+def generate_coach_template_model(db_session, id):
+    db_session.add(Exercise(id=id, category='Lower Back', name='Deadlifts'))
+    db_session.add(Exercise(id=id + 1, category='Latisimus Dorsi', name='Pullups'))
     db_session.commit()
     return CoachTemplate(
-        id=1, name='Test Coach Template', sessions=[
+        id=id, name='Test Coach Template', sessions=[
             CoachSession(
                 name='Test Session 1', order=1, coach_exercises=[
                     CoachExercise(
-                        exercise_id=1, order=1
+                        exercise_id=id, order=1
                     ),
                     CoachExercise(
-                        exercise_id=2, order=1
+                        exercise_id=id + 1, order=1
                     )
                 ]
             ),
             CoachSession(
                 name='Test Session 2', order=2, coach_exercises=[
                     CoachExercise(
-                        exercise_id=1, order=1
+                        exercise_id=id, order=1
                     ),
                     CoachExercise(
-                        exercise_id=2, order=1
+                        exercise_id=id + 1, order=1
                     )
                 ]
             )
@@ -577,7 +723,7 @@ def generate_coach_template_model(db_session):
 # It returns (response, code, coach_template)
 def create_client_template(client, db_session, client_id):
     # Create a coach template to assign to a client
-    coach_template = generate_coach_template_model(db_session)
+    coach_template = generate_coach_template_model(db_session, 1)
     db.session.add(coach_template)
     db.session.commit()
     db.session.refresh(coach_template)
@@ -602,16 +748,231 @@ def create_client_template(client, db_session, client_id):
 
     resp, code = request(client, "POST", '/client/template', data=data)
     return resp, code, coach_template
+
+
+def create_coach_template(client, db_session):
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model(db_session, 1)
+    
+    data = {
+        'name': coach_template.name,
+        'sessions': []
+    }
+    # # Specify the sets, reps and weight of the coach exercises within the sessions
+    for coach_session in coach_template.sessions:
+        session = {'name': coach_session.name, 'order': coach_session.order, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'exercise_id': coach_exercise.exercise_id,
+                'order': coach_exercise.order
+            })
+        data['sessions'].append(session)
+    
+    resp, code = request(client, "POST", '/coach/template', data=data)
+    return resp, code, coach_template
     
 
-# # a method to get the current user id
-# # there is probably a better way to do this 
-# # but this is the only way I could make it work
-# def get_user_id():
-#     user = User()
-#     users = User.query.filter(User.email == 'test@gmail.com').all()
-#     user_id = None
-#     for user in users:
-#         user_id = user.id
+
+#  ----------------- COACH TEMPLATES -----------------
+def test_get_coach_template(client, db_session):
+    # Create and sign into the client
+    coach = sign_up_user_for_testing(client, test_coach)
+    assert coach['user'] != None
+    assert coach['user']['role'] == 'COACH'
+
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_coach_template_model(db_session, 1)
+    db.session.add(template)
+    db.session.commit()
+    db.session.refresh(template)
+
+    # Retrieve template using api
+    url = '/coach/template?coach_template_id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
+
+def test_get_coach_templates(client, db_session):
+    # Create and sign into the client
+    coach = sign_up_user_for_testing(client, test_coach)
+    assert coach['user'] != None
+    assert coach['user']['role'] == 'COACH'
+
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+   # Create 2 templates for multiple template retrieval
+    template1 = generate_coach_template_model(db_session, 1)
+    template2 = generate_coach_template_model(db_session, 3)
+    db.session.add(template1)
+    db.session.add(template2)
+    db.session.commit()
+    db.session.refresh(template1)
+    db.session.refresh(template2)
+
+    resp, code = request(client, "GET", '/coach/templates')
+    assert code == 200
+    assert len(resp['templates']) == 2
+    assert resp['templates'][0]['id'] == template1.id or resp['templates'][1]['id'] == template2.id
+    assert resp['templates'][1]['id'] == template1.id or resp['templates'][1]['id'] == template2.id
+
+
+def test_post_coach_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template
+    resp, code, coach_template = create_coach_template(client, db_session)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name
+
+
+def test_put_coach_template(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # client_user = sign_up_user_for_testing(client, test_client)
+    # assert client_user['user'] != None
+    # assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_coach_template(client, db_session)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name
+
+    # Change name of template and ordering or sessions
+    # TODO: Need to test deleting a session through this endpoint. Getting make_transient error
+    data = {
+        'id': 1,
+        'name': 'Test Template Name Change',
+        'sessions': [
+            {
+                'id': resp['sessions'][0]['id'],
+                'name': 'Test Session Name Change 2',
+                'order': 2
+            },
+            {
+                'id': resp['sessions'][1]['id'],
+                'name': 'Test Session Name Change 1',
+                'order': 1
+            }
+        ]
+    }
+
+    updated_coach_template, code = request(client, "PUT", '/coach/template', data=data)
+    assert updated_coach_template != None and code == 200
+    assert updated_coach_template['name'] == 'Test Template Name Change'
+    assert len(updated_coach_template['sessions']) == 2
+    assert updated_coach_template['sessions'][0]['name'] == 'Test Session Name Change 1' and updated_coach_template['sessions'][0]['id'] == data['sessions'][1]['id']
+    assert updated_coach_template['sessions'][1]['name'] == 'Test Session Name Change 2' and updated_coach_template['sessions'][1]['id'] == data['sessions'][0]['id']
+
+def test_get_coach_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
     
-#     return user_id
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_coach_template(client, db_session)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name
+
+    # Retrieve a particular session from the client template
+    url = '/coach/session?coach_session_id={}'.format(resp['sessions'][0]['id'])
+    coach_session, code = request(client, 'GET', url)
+    assert code == 200
+    assert coach_session != None
+    assert coach_session['id'] == resp['sessions'][0]['id']
+
+
+def test_post_coach_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_coach_template(client, db_session)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name
+
+    data = {
+        'coach_template_id': resp['id'],
+        'name': 'Feet Day'
+    }
+
+    # Test creating a client session as a coach (exercises should be added into exercises)
+    coach_session_1, code = request(client, "POST", '/coach/session', data=data)
+    assert code == 200
+    assert coach_session_1['name'] == 'Feet Day'
+
+
+
+def test_put_coach_session(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_coach_template(client, db_session)
+
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name
+
+    db_session.add(Exercise(id=10, category='Lower Back', name='Deadlifts'))
+    # db_session.add(Exercise(id=2, category='Latisimus Dorsi', name='Pullups'))
+
+    # Update a particular client session, we will update the first client session
+    data = {
+        'id': resp['sessions'][0]['id'],
+        'name': 'Coach session name change',
+        'coach_exercises': [
+            {
+                "coach_session_id": resp['sessions'][0]['id'],
+                "exercise_id": 1,
+                "order": 1
+
+		    }
+        ]
+    }
+
+    resp, code = request(client, "PUT", '/coach/session', data=data)
+    assert code == 200
+    assert resp != None
+    assert len(resp['coach_exercises']) == 1
+    assert resp['name'] == 'Coach session name change'
