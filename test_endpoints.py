@@ -193,25 +193,39 @@ def test_update_profile(client, db_session):
 #     logout_rv = client.get("auth/logout")
 #     assert logout_rv.json == {'success': True}
 
-def test_forgot_password(client, db_session):
+# forgot password and reset password have to be tested in the same endpoint because all db transactions are
+# rolled back after the test ends (the user will lose their reset_token)
+def test_forgot_password_flow(client, db_session):
      # sign up as client
     client_user = sign_up_user_for_testing(client, test_client)
     assert client_user['user'] != None
     assert client_user['user']['email'] == 'test@client.com'
+    assert client_user['user']['reset_token'] == None
 
     # pass email to endpoint
     url = '/forgotPassword?email={}'.format(client_user['user']['email'])
     resp, code = request(client, "GET", url)
-
     assert code == 200 and resp != None
     assert resp['success'] == True
 
+    # check to see that a reset token was created for the user
+    user = User.query.get(client_user['user']['id'])
+    assert user != None
+    assert user.reset_token != None
 
+    # reset the users password with the generated reset_token and a new password
+    data = {
+        'password': 'testchangepassword',
+        'reset_token': user.reset_token
+    }
+    resp, code = request(client, "POST", 'resetPassword', data=data)
+    assert code == 200 and resp != None
+    assert resp['success'] == True
 
-# def test_reset_password(client):
-#     assert True
-
-
+    # Query the user again and check that the password has changed.
+    # TODO: Refreshing doesn't work for some reason
+    user = User.query.get(client_user['user']['id'])
+    assert bcrypt.check_password_hash(user.password, data['password'].encode(encoding='utf-8'))
 
 def test_terminate_client(client, db_session):
     #sign up a coach
