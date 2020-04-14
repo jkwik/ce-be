@@ -8,7 +8,10 @@ Current endpoint: https://coach-easy-deploy.herokuapp.com/
 - Install packages by running `make install`
 
 ## Running the application
-- Run `make run`. This will pull the DATABASE_URL from heroku and start the application
+- Run `make run-dev`. This will pull the DATABASE_URL from heroku and start the application
+
+## Testing the application
+- Run `make run` or `make run-cov` to run the tests and run the tests and generate a `htmlcov` folder containing an `index.html` file to display the coverage report
 
 ## Connecting to our database using pgAdmin 4
 - Download pgAdmin 4 https://www.pgadmin.org/download/
