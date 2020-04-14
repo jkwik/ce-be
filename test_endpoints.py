@@ -769,7 +769,6 @@ def create_coach_template(client, db_session):
         data['sessions'].append(session)
     
     resp, code = request(client, "POST", '/coach/template', data=data)
-    pdb.set_trace()
     return resp, code, coach_template
     
 
