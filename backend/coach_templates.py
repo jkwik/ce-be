@@ -157,6 +157,11 @@ def createTemplate(token_claims):
         return {
             "error": "Must specify name (string))"
         }, 400
+
+    if 'sessions' not in body:
+        return {
+            "error": "Must specify a session list with at least 1 session"
+        }, 400
     
     # check if template name is available, no duplicates allowed
     check_duplicate = CoachTemplate.query.filter_by(name=body['name']).first()
@@ -167,7 +172,17 @@ def createTemplate(token_claims):
         }, 400
     
     
-    new_template = CoachTemplate(name=body['name'])
+    new_template = CoachTemplate(name=body['name'], sessions=[])
+    # Enter each session and its corresponding coach exercises into the template
+    for session in body['sessions']:
+        coach_session = CoachSession(
+            name=session['name'], order=session['order'], coach_exercises=[]
+        )
+        for coach_exercise in session['coach_exercises']:
+         coach_session.coach_exercises.append(CoachExercise(
+             exercise_id=coach_exercise['exercise_id'], order=coach_exercise['order']
+         ))
+        new_template.sessions.append(coach_session)
     
     try:
         # create new template in CoachTemplate table
