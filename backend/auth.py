@@ -10,10 +10,14 @@ import uuid
 def login():
     body = request.get_json(force=True)
 
+    #  trim the email to remove unnecessary spaces
+    email = body['email'].strip()
+    # convert input email to lowercase
+    email = email.lower()
     # Validate that the email is the correct format
     try:
-        v = validate_email(body['email']) # validate and get info
-        body['email'] = v["email"] # replace with normalized form
+        v = validate_email(email) # validate and get info
+        email = v["email"] # replace with normalized form
     except EmailNotValidError as e:
         # email is not valid, return error code
         return {
@@ -21,7 +25,7 @@ def login():
         }, 406
 
     # Grab user from the database given email and password combination
-    user = User.query.filter_by(email=body['email']).first()
+    user = User.query.filter_by(email=email).first()
     if user == None:
         return {
             "error": "Invalid username or password"
