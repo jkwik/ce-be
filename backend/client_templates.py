@@ -263,8 +263,6 @@ def getNextClientSession(token_claims):
         if session.completed == False:
             nextSession = session
             break
-        else:
-            next
 
     result = client_session_schema.dump(nextSession)
 
