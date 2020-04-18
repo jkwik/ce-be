@@ -896,13 +896,29 @@ def test_post_coach_session(client, db_session):
 
     data = {
         'coach_template_id': resp['id'],
-        'name': 'Feet Day'
+        'name': 'Feet Day',
+        'coach_exercises': [
+            {
+                "exercise_id": 1,
+                "order": 1
+            },
+            {
+                "category": "Back",
+                "name": "Deadlifts",
+                "order": 2
+            },
+            {
+                "exercise_id": 2,
+                "order": 3
+            }
+	    ]
     }
 
     # Test creating a client session as a coach (exercises should be added into exercises)
     coach_session_1, code = request(client, "POST", '/coach/session', data=data)
     assert code == 200
     assert coach_session_1['name'] == 'Feet Day'
+    assert len(coach_session_1['coach_exercises']) == 3
 
 
 
