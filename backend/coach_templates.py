@@ -179,9 +179,30 @@ def createTemplate(token_claims):
             name=session['name'], order=session['order'], coach_exercises=[]
         )
         for coach_exercise in session['coach_exercises']:
-         coach_session.coach_exercises.append(CoachExercise(
-             exercise_id=coach_exercise['exercise_id'], order=coach_exercise['order']
-         ))
+            # Check if the exercise_id was supplied, if not then create a new exercise using the category and name
+            if 'exercise_id' not in coach_exercise:
+                if 'category' not in coach_exercise or 'name' not in coach_exercise:
+                    return {
+                        "error": "Each coach_exercise needs to specify an exercise_id OR a category and name pair"
+                    }, 400
+                exercise = Exercise(category=coach_exercise['category'], name=coach_exercise['name'])
+                db.session.add(exercise)
+                try:
+                    db.session.commit()
+                    db.session.refresh(exercise)
+                except Exception as e:
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+
+                coach_session.coach_exercises.append(CoachExercise(
+                    exercise_id=exercise.id, order=coach_exercise['order']
+                ))
+            else:
+                coach_session.coach_exercises.append(CoachExercise(
+                    exercise_id=coach_exercise['exercise_id'], order=coach_exercise['order']
+                ))
+
         new_template.sessions.append(coach_session)
     
     try:
@@ -217,14 +238,6 @@ def createSession(token_claims):
             "error": "Must specify coach_template_id (integer) and name (string))"
         }, 400
     
-    # check if template name is available, no duplicates allowed
-    check_duplicate = CoachSession.query.filter_by(name=body['name'], coach_template_id=body['coach_template_id']).first()
-
-    if check_duplicate:
-        return {
-            "error": "Session name already exists for this template"
-        }, 400
-    
     # find current max order value for sessions belonging to the passed in coach_template_id
     max_order = db.session.query(func.max(CoachSession.order)).filter_by(coach_template_id=body['coach_template_id']).scalar()
     
@@ -236,7 +249,34 @@ def createSession(token_claims):
         max_order += 1
 
     # create the new session with name, coach_template_id, and order
-    new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order)
+    new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order, coach_exercises=[])
+
+    # Check if they passed in coach_exercises
+    if 'coach_exercises' in body:
+        for coach_exercise in body['coach_exercises']:
+            # Check if the exercise_id was supplied, if not then create a new exercise using the category and name
+            if 'exercise_id' not in coach_exercise:
+                if 'category' not in coach_exercise or 'name' not in coach_exercise:
+                    return {
+                        "error": "Each coach_exercise needs to specify an exercise_id OR a category and name pair"
+                    }, 400
+                exercise = Exercise(category=coach_exercise['category'], name=coach_exercise['name'])
+                db.session.add(exercise)
+                try:
+                    db.session.commit()
+                    db.session.refresh(exercise)
+                except Exception as e:
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+
+                new_session.coach_exercises.append(CoachExercise(
+                    exercise_id=exercise.id, order=coach_exercise['order']
+                ))
+            else:
+                new_session.coach_exercises.append(CoachExercise(
+                    exercise_id=coach_exercise['exercise_id'], order=coach_exercise['order']
+                ))
     
     try:
         # create new template in CoachTemplate table
