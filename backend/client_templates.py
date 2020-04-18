@@ -260,10 +260,11 @@ def getNextClientSession(token_claims):
         }, 404
 
     for session in template.sessions:
-        if session.completed == True:
-            next
-        else:
+        if session.completed == False:
             nextSession = session
+            break
+        else:
+            next
 
     result = client_session_schema.dump(nextSession)
 
