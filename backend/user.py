@@ -71,10 +71,17 @@ def deleteUser(token_claims):
 def signUp():
     body = request.get_json(force=True)
 
+    #  trim the email to remove unnecessary spaces
+    email = body['email'].strip()
+    print(email)
+    # convert input email to lowercase
+    email = email.lower()
+    print(email)
+
     # Validate that the email is the correct format
     try:
-        v = validate_email(body['email']) # validate and get info
-        body['email'] = v["email"] # replace with normalized form
+        v = validate_email(email) # validate and get info
+        email = v["email"] # replace with normalized form
     except EmailNotValidError as e:
         # email is not valid, return error code
         return {
@@ -100,7 +107,7 @@ def signUp():
     # Create the user with the encoded password
     user = User(
         first_name=body['first_name'], last_name=body['last_name'],
-        email=body['email'], password=encodedPassword,
+        email=email, password=encodedPassword,
         approved=False, role=body['role'],
         verified=False
     )
