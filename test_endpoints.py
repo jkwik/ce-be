@@ -44,7 +44,7 @@ def client(request):
 def _db():
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
     # Comment above and uncomment below to persist the database to the local folder structure
-    # app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://test.db"
+    # app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///test.db"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Create sessions table to handle login sessions
@@ -288,9 +288,9 @@ def test_get_client_template(client, db_session):
     # Create a template for retrieval
     template = generate_client_template_model()
     template.user_id = user['user']['id']
-    db.session.add(template)
-    db.session.commit()
-    db.session.refresh(template)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
 
     # Retrieve template using api
     url = '/client/template?id={}'.format(str(template.id))
@@ -313,11 +313,11 @@ def test_get_client_templates(client, db_session):
     template2 = generate_client_template_model()
     template1.user_id = user['user']['id']
     template2.user_id = user['user']['id']
-    db.session.add(template1)
-    db.session.add(template2)
-    db.session.commit()
-    db.session.refresh(template1)
-    db.session.refresh(template2)
+    db_session.add(template1)
+    db_session.add(template2)
+    db_session.commit()
+    db_session.refresh(template1)
+    db_session.refresh(template2)
 
     url = '/client/templates?user_id={}'.format(str(user['user']['id']))
     resp, code = request(client, "GET", url)
@@ -342,9 +342,9 @@ def test_post_client_template(client, db_session):
 
     # Create a coach template to assign to a client
     coach_template = generate_coach_template_model(db_session, 1)
-    db.session.add(coach_template)
-    db.session.commit()
-    db.session.refresh(coach_template)
+    db_session.add(coach_template)
+    db_session.commit()
+    db_session.refresh(coach_template)
     
     # Create a client template using this coach template
     data = {
@@ -387,9 +387,9 @@ def test_get_client_template(client, db_session):
     # Create a template for retrieval
     template = generate_client_template_model()
     template.user_id = user['user']['id']
-    db.session.add(template)
-    db.session.commit()
-    db.session.refresh(template)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
 
     # Retrieve template using api
     url = '/client/template?id={}'.format(str(template.id))
@@ -412,11 +412,11 @@ def test_get_client_templates(client, db_session):
     template2 = generate_client_template_model()
     template1.user_id = user['user']['id']
     template2.user_id = user['user']['id']
-    db.session.add(template1)
-    db.session.add(template2)
-    db.session.commit()
-    db.session.refresh(template1)
-    db.session.refresh(template2)
+    db_session.add(template1)
+    db_session.add(template2)
+    db_session.commit()
+    db_session.refresh(template1)
+    db_session.refresh(template2)
 
     url = '/client/templates?user_id={}'.format(str(user['user']['id']))
     resp, code = request(client, "GET", url)
@@ -470,6 +470,7 @@ def test_put_client_template(client, db_session):
     data = {
         'id': 1,
         'name': 'Test Template Name Change',
+        'user_id': client_user['user']['id'],
         'sessions': [
             {
                 'id': client_template['sessions'][0]['id'],
@@ -612,6 +613,47 @@ def test_put_client_session(client, db_session):
     assert len(resp['exercises']) == 1
     assert resp['name'] == 'Client session name change'
 
+def test_get_active_client_template(client, db_session):
+    # Create and sign into the client
+    user = sign_up_user_for_testing(client, test_client)
+    assert user['user'] != None
+    assert user['user']['role'] == 'CLIENT'
+
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create 2 templates so that we can grab the specific active template. We also want to check if there are 2
+    # active templates that the response returns a 409 error code
+    template1 = generate_client_template_model(active=True)
+    template2 = generate_client_template_model(active=True)
+    template1.user_id = user['user']['id']
+    template2.user_id = user['user']['id']
+    db_session.add(template1)
+    db_session.add(template2)
+    db_session.commit()
+    db_session.refresh(template1)
+    db_session.refresh(template2)
+
+    url = '/client/template/active'
+    resp, code = request(client, "GET", url)
+    assert code == 400 and resp['error'] == 'No query parameter user_id found in request'
+
+    url = '/client/template/active?user_id={}'.format(user['user']['id'])
+    resp, code = request(client, "GET", url)
+    assert code == 409 and resp['error'] == "More than 1 active template found for client"
+
+    # Update one of the templates to not be active (template 2). IMPORTANT to update and delete objects you have to grab the current session
+    # that is handling the specific template
+    template2.active = False
+    current_db_session = db_session.object_session(template2)
+    current_db_session.commit()
+
+    url = '/client/template/active?user_id={}'.format(user['user']['id'])
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template1.id
+
 #  ----------------- HELPER METHODS -------------------
 
 # sign up a user. It returns the user response. It also error checks
@@ -675,9 +717,9 @@ def login_user_for_testing(client, user):
 
     return resp.json
 
-def generate_client_template_model():
+def generate_client_template_model(active=True):
     return ClientTemplate(
-        name='Test Client Template', start_date='2020-12-12', completed=False, sessions=[
+        name='Test Client Template', start_date='2020-12-12', completed=False, active=active, sessions=[
             ClientSession(
                 name='Test Session 1', order=1, completed=False, exercises=[
                     ClientExercise(
@@ -724,9 +766,9 @@ def generate_coach_template_model(db_session, id):
 def create_client_template(client, db_session, client_id):
     # Create a coach template to assign to a client
     coach_template = generate_coach_template_model(db_session, 1)
-    db.session.add(coach_template)
-    db.session.commit()
-    db.session.refresh(coach_template)
+    db_session.add(coach_template)
+    db_session.commit()
+    db_session.refresh(coach_template)
     
     # Create a client template using this coach template and assign it to the client
     data = {
@@ -785,9 +827,9 @@ def test_get_coach_template(client, db_session):
 
     # Create a template for retrieval
     template = generate_coach_template_model(db_session, 1)
-    db.session.add(template)
-    db.session.commit()
-    db.session.refresh(template)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
 
     # Retrieve template using api
     url = '/coach/template?coach_template_id={}'.format(str(template.id))
@@ -809,11 +851,11 @@ def test_get_coach_templates(client, db_session):
    # Create 2 templates for multiple template retrieval
     template1 = generate_coach_template_model(db_session, 1)
     template2 = generate_coach_template_model(db_session, 3)
-    db.session.add(template1)
-    db.session.add(template2)
-    db.session.commit()
-    db.session.refresh(template1)
-    db.session.refresh(template2)
+    db_session.add(template1)
+    db_session.add(template2)
+    db_session.commit()
+    db_session.refresh(template1)
+    db_session.refresh(template2)
 
     resp, code = request(client, "GET", '/coach/templates')
     assert code == 200

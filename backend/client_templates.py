@@ -44,6 +44,27 @@ def getClientTemplate(token_claims):
 
     return templateResult
 
+@app.route("/client/template/active", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getActiveClientTemplate(token_claims):
+    # Any logged in user should be able to access this method
+    user_id = request.args.get('user_id')
+    if user_id == None:
+        return {
+            "error": "No query parameter user_id found in request"
+        }, 400
+
+    # We want to grab all active templates so that we can check that there is only one
+    templates = ClientTemplate.query.filter_by(user_id=user_id, active=True).all()
+    if len(templates) != 1:
+        return {
+            "error": "More than 1 active template found for client"
+        }, 409
+
+    templateResult = client_template_schema.dump(templates[0])
+
+    return templateResult
+
 @app.route("/client/template", methods=["POST"])
 @http_guard(renew=True, nullable=False)
 def createClientTemplate(token_claims):
@@ -82,8 +103,17 @@ def createClientTemplate(token_claims):
 
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
-        name=coach_template.name, start_date=str(date.today()), user_id=client_id, completed=False, sessions=[]
+        name=coach_template.name, start_date=str(date.today()), user_id=client_id, completed=False, active=True, sessions=[]
     )
+    # Set all other client templates if there are any to active false
+    try:
+        db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(client_id))
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
 
     # Iterate through sessions and create client_sessions, and client_exercises from them
     for session in sessions:
@@ -147,8 +177,21 @@ def updateClientTemplate(token_claims):
             "error": "No client template found with id: " + str(body['id'])
         }, 404
 
+    # Set all client_templates belonging to the user to active=False so that we can set the updated template to active=True
+    try:
+        db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(body['user_id']))
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+
     # Set all fields in client_template that were present in the body
     setNonNullClientTemplateFields(client_template, body)
+
+    # Set the client_template to be the active template
+    client_template.active = True
 
     # Iterate through the client_sessions and for each session, check if it is present in the body, if it is, then update the session
     # and insert it into client_sessions. If it isn't present, then don't insert into client_sessions
@@ -243,6 +286,19 @@ def createClientSession(token_claims):
             "error": "No client template found with template id: " + str(body['client_template'])
         }, 404
 
+    # Set all client_templates belonging to the user to active=False so that we can set the corresponding template for this session to active=True
+    try:
+        db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(client_template.user_id))
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+
+    # Set the current client_template to active=True
+    client_template.active = True
+
     # Find the next order for the client_session/training_entry based on the role of the requester
     next_order = findNextSessionOrder(body['client_template_id'])
 
@@ -304,6 +360,25 @@ def updateClientSession(token_claims):
         return {
             "error": "No client session found with supplied id"
         }, 404
+
+    client_template = ClientTemplate.query.get(client_session.client_template_id)
+    if client_template == None:
+        return {
+            "error": "No client template found with id: " + str(client_session.client_template_id)
+        }, 404
+
+    # Set all client_templates belonging to the user to active=False so that we can set the corresponding template for this session to active=True
+    try:
+        db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(client_template.user_id))
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+
+    # Set the current client_template to active=True
+    client_template.active = True
 
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
