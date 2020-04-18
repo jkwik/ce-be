@@ -199,6 +199,33 @@ def getClientSession(token_claims):
 
     return sessionResult
 
+@app.route("/client/session/next", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getNextClientSession(token_claims):
+    # Any logged in user should be able to access this method
+    client_id = request.args.get('client_id')
+
+    if client_id == None:
+        return {
+            "error": "No query parameter client_id found in request"
+        }, 400
+    # get the active tempalte
+    template = ClientTemplate.query.filter_by(user_id=client_id, active=True).first()
+    if template == None:
+        return {
+            "error": "No active template found with client_id: " + client_id
+        }, 404
+
+    for session in template.sessions:
+        if session.completed == True:
+            next
+        else:
+            nextSession = session
+
+    result = client_session_schema.dump(nextSession)
+
+    return result
+
 @app.route("/client/session", methods=["POST"])
 @http_guard(renew=True, nullable=False)
 def createClientSession(token_claims):
