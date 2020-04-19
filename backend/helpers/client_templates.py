@@ -63,8 +63,6 @@ def setNonNullClientSessionFields(client_session, fields):
         client_session.order = fields['order']
     if 'completed' in fields:
         client_session.completed = fields['completed']
-        if fields['completed']:
-            client_session.completed_date = str(date.today())
     if 'client_template_id' in fields:
         client_session.client_template_id = fields['client_template_id']
 
