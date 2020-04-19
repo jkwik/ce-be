@@ -15,8 +15,8 @@ from flask_session import Session
 
 # Test client object that should be used when creating test clients
 test_client = {
-    'first_name': 'backend_tests_client',
-    'last_name': 'backend_tests_client',
+    'first_name': 'test',
+    'last_name': 'client',
     'email': 'test@client.com',
     'password': 'fakepassword',
     'role': 'CLIENT'
@@ -24,8 +24,8 @@ test_client = {
 
 # Test client object that should be used when creating test coaches
 test_coach = {
-    'first_name': 'backend_tests_coach',
-    'last_name': 'backend_tests_coach',
+    'first_name': 'test',
+    'last_name': 'coach',
     'email': 'test@coach.com',
     'password': 'fakepassword',
     'role': 'COACH'
@@ -345,6 +345,18 @@ def test_post_client_template(client, db_session):
     assert resp != None
     assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
 
+    # Create a second client template to test slugification
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=3)
+    assert code == 200
+    assert resp != None
+    assert resp['slug'] == 'test-coach-template-test-client-1'
+
+    # Create a third client template to test incrementing slugification logic
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=5)
+    assert code == 200
+    assert resp != None
+    assert resp['slug'] == 'test-coach-template-test-client-2'
+
 def test_put_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
@@ -467,9 +479,9 @@ def test_post_client_session(client, db_session):
     assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
     assert len(client_template['sessions']) == 2
 
-    data = {
+    data1 = {
         'client_template_id': client_template['id'],
-        'name': 'Feet Day',
+        'name': 'Feet Day 1',
         'exercises': [
             {
                 "name": "Tip Toe",
@@ -482,18 +494,33 @@ def test_post_client_session(client, db_session):
         ]
     }
 
+    data2 = {
+        'client_template_id': client_template['id'],
+        'name': 'Feet Day 2',
+        'exercises': [
+            {
+                "name": "Tip Toe",
+                "category": "Arch",
+                "sets": 3,
+                "reps": 15,
+                "weight": 150,
+                "order": 1
+            },
+        ]
+    }
+
     # Test creating a client session as a coach (exercises should be added into exercises)
-    client_session_1, code = request(client, "POST", '/client/session', data=data)
+    client_session_1, code = request(client, "POST", '/client/session', data=data1)
     assert code == 200
-    assert client_session_1['name'] == 'Feet Day'
+    assert client_session_1['name'] == 'Feet Day 1'
     assert len(client_session_1['exercises']) == 1 and len(client_session_1['training_entries']) == 0
 
     login_resp = login_user_for_testing(client, test_client)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
-    client_session_2, code = request(client, "POST", '/client/session', data=data)
+    client_session_2, code = request(client, "POST", '/client/session', data=data2)
     assert code == 200
-    assert client_session_2['name'] == 'Feet Day'
+    assert client_session_2['name'] == 'Feet Day 2'
     assert len(client_session_2['exercises']) == 0 and len(client_session_2['training_entries']) == 1
 
 
@@ -646,9 +673,9 @@ def login_user_for_testing(client, user):
 
 def generate_client_template_model(active=True):
     return ClientTemplate(
-        name='Test Client Template', start_date='2020-12-12', completed=False, active=active, sessions=[
+        name='Test Client Template', slug='test-client-template', start_date='2020-12-12', completed=False, active=active, sessions=[
             ClientSession(
-                name='Test Session 1', order=1, completed=False, exercises=[
+                name='Test Session 1', order=1, completed=False, slug='test-session-1', exercises=[
                     ClientExercise(
                         sets=3, reps=12, weight=225, category='Lower Back', name='Deadlifts', order=1
                     )
@@ -690,9 +717,9 @@ def generate_coach_template_model(db_session, id):
 
 # This method creates a client template by first creating a coach_template, then assigning it to a client.
 # It returns (response, code, coach_template)
-def create_client_template(client, db_session, client_id):
+def create_client_template(client, db_session, client_id, starting_exercise_id=1):
     # Create a coach template to assign to a client
-    coach_template = generate_coach_template_model(db_session, 1)
+    coach_template = generate_coach_template_model(db_session, starting_exercise_id)
     db_session.add(coach_template)
     db_session.commit()
     db_session.refresh(coach_template)

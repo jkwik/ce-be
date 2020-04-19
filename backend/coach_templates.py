@@ -261,7 +261,20 @@ def createSession(token_claims):
         return {
             "error": "Must specify coach_template_id (integer) and name (string))"
         }, 400
+
+    coach_template = CoachTemplate.query.get(body['coach_template_id'])
+    if coach_template == None:
+        return {
+            "error": "No coach template found with the supplied coach_template_id"
+        }, 404
     
+    # Check for duplicate session name
+    coach_session = CoachSession.query.filter_by(coach_template_id=coach_template.id, name=body['name']).first()
+    if coach_session != None:
+        return {
+            "error": "Duplicate session name found"
+        }, 409
+
     # find current max order value for sessions belonging to the passed in coach_template_id
     max_order = db.session.query(func.max(CoachSession.order)).filter_by(coach_template_id=body['coach_template_id']).scalar()
     

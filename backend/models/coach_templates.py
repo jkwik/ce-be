@@ -64,7 +64,7 @@ coach_session_schemas = CoachSessionSchema(many=True)
 # this schema is used for retrieving partial information about a session
 class PartialCoachSessionSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'order')
+        fields = ('id', 'name', 'slug', 'order')
 
 
 

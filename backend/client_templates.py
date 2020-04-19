@@ -4,9 +4,11 @@ from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
+from backend.helpers.general import makeTemplateSlugUnique
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import date
+from slugify import slugify
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -18,8 +20,8 @@ def getClientTemplates(token_claims):
         }, 400
 
     templates = db.session.query(
-        ClientTemplate.id, ClientTemplate.name, ClientTemplate.start_date, ClientTemplate.end_date,
-        ClientTemplate.user_id, ClientTemplate.completed, ClientTemplate.active
+        ClientTemplate.id, ClientTemplate.name, ClientTemplate.slug, ClientTemplate.start_date,
+        ClientTemplate.end_date, ClientTemplate.user_id, ClientTemplate.completed, ClientTemplate.active
     ).filter(ClientTemplate.user_id == user_id)
 
     result = client_template_schemas.dump(templates)
@@ -101,9 +103,14 @@ def createClientTemplate(token_claims):
             "error": "No user found with user_id: " + str(client_id)
         }, 404
 
+    # Slugify the coach template name and make it unique. Making it unique checks for an existing client template slug and increments
+    # the count, adds to end of slug if one exists
+    client_template_slug = makeTemplateSlugUnique(ClientTemplate, slugify(coach_template.name + "-" + client.first_name + "-" + client.last_name))
+
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
-        name=coach_template.name, start_date=str(date.today()), user_id=client_id, completed=False, active=True, sessions=[]
+        name=coach_template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
+        completed=False, active=True, sessions=[]
     )
     # Set all other client templates if there are any to active false
     try:
@@ -123,9 +130,9 @@ def createClientTemplate(token_claims):
                 "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
             }, 404
 
-        # Initialize a client session and fill with client_exercises
+        # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
         client_session = ClientSession(
-            name=coach_session.name, order=coach_session.order, completed=False, exercises=[], training_entries=[]
+            name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
         )
         for coach_exercise in session['coach_exercises']:
             exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
@@ -285,6 +292,13 @@ def createClientSession(token_claims):
             "error": "No client template found with template id: " + str(body['client_template'])
         }, 404
 
+    # Check for duplicate session name
+    existing_session = ClientSession.query.filter_by(client_template_id=client_template.id, name=body['name']).first()
+    if existing_session != None:
+        return {
+            "error": "Duplicate session name found in template: " + body['name']
+        }, 409
+
     # Set all client_templates belonging to the user to active=False so that we can set the corresponding template for this session to active=True
     try:
         db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(client_template.user_id))
@@ -301,9 +315,12 @@ def createClientSession(token_claims):
     # Find the next order for the client_session/training_entry based on the role of the requester
     next_order = findNextSessionOrder(body['client_template_id'])
 
+    # Slugify the session name
+    session_slug = slugify(body['name'])
+
     # Create a new client_session and insert it into the database
     client_session = ClientSession(
-        name=body['name'], order=next_order, client_template_id=body['client_template_id'],
+        name=body['name'], slug=session_slug, order=next_order, client_template_id=body['client_template_id'],
         exercises=[], training_entries=[]
     )
 
