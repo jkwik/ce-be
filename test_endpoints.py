@@ -664,9 +664,9 @@ def generate_coach_template_model(db_session, id):
     db_session.add(Exercise(id=id + 1, category='Latisimus Dorsi', name='Pullups'))
     db_session.commit()
     return CoachTemplate(
-        id=id, name='Test Coach Template', sessions=[
+        id=id, name='Test Coach Template', slug='test-coach-template', sessions=[
             CoachSession(
-                name='Test Session 1', order=1, coach_exercises=[
+                name='Test Session 1', slug='test-session-1', order=1, coach_exercises=[
                     CoachExercise(
                         exercise_id=id, order=1
                     ),
@@ -676,7 +676,7 @@ def generate_coach_template_model(db_session, id):
                 ]
             ),
             CoachSession(
-                name='Test Session 2', order=2, coach_exercises=[
+                name='Test Session 2', slug='test-session-2', order=2, coach_exercises=[
                     CoachExercise(
                         exercise_id=id, order=1
                     ),
