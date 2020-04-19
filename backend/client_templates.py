@@ -19,7 +19,7 @@ def getClientTemplates(token_claims):
 
     templates = db.session.query(
         ClientTemplate.id, ClientTemplate.name, ClientTemplate.start_date, ClientTemplate.end_date,
-        ClientTemplate.user_id, ClientTemplate.completed
+        ClientTemplate.user_id, ClientTemplate.completed, ClientTemplate.active
     ).filter(ClientTemplate.user_id == user_id)
 
     result = client_template_schemas.dump(templates)
