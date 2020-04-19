@@ -7,6 +7,7 @@ from sqlalchemy import func
 from backend.models.user import Role
 from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schemas, exercise_schema
 from backend.helpers.coach_templates import setNonNullCoachSessionFields, isSessionPresent
+from slugify import slugify
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -171,12 +172,15 @@ def createTemplate(token_claims):
             "error": "Template name already exists"
         }, 400
     
+    # If the template name is free, then we create a slug from it
+    template_slug = slugify(body['name'])
     
-    new_template = CoachTemplate(name=body['name'], sessions=[])
+    new_template = CoachTemplate(name=body['name'], sessions=[], slug=template_slug)
     # Enter each session and its corresponding coach exercises into the template
     for session in body['sessions']:
+        session_slug = slugify(session['name'])
         coach_session = CoachSession(
-            name=session['name'], order=session['order'], coach_exercises=[]
+            name=session['name'], slug=session_slug, order=session['order'], coach_exercises=[]
         )
         for coach_exercise in session['coach_exercises']:
             # Check if the exercise_id was supplied, if not then create a new exercise using the category and name
@@ -210,6 +214,7 @@ def createTemplate(token_claims):
         db.session.add(new_template)
         db.session.commit()
     except Exception as e:
+        print(e)
         return {
             "error": "Internal Server Error"
         }, 500
@@ -248,8 +253,14 @@ def createSession(token_claims):
         # increment the order by 1
         max_order += 1
 
+    # create a slug based on the session name
+    session_slug = slugify(body['name'])
+
     # create the new session with name, coach_template_id, and order
-    new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order, coach_exercises=[])
+    new_session = CoachSession(
+        name=body['name'], slug=session_slug, coach_template_id=body['coach_template_id'],
+        order=max_order, coach_exercises=[]
+    )
 
     # Check if they passed in coach_exercises
     if 'coach_exercises' in body:

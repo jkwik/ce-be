@@ -739,7 +739,7 @@ def create_coach_template(client, db_session):
     
     resp, code = request(client, "POST", '/coach/template', data=data)
     return resp, code, coach_template
-    
+
 
 
 #  ----------------- COACH TEMPLATES -----------------
@@ -806,7 +806,7 @@ def test_post_coach_template(client, db_session):
     assert code == 200
     assert resp != None
     assert resp['name'] == coach_template.name
-
+    assert resp['slug'] == 'test-coach-template'
 
 def test_put_coach_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -918,8 +918,8 @@ def test_post_coach_session(client, db_session):
     coach_session_1, code = request(client, "POST", '/coach/session', data=data)
     assert code == 200
     assert coach_session_1['name'] == 'Feet Day'
+    assert coach_session_1['slug'] == 'feet-day'
     assert len(coach_session_1['coach_exercises']) == 3
-
 
 
 def test_put_coach_session(client, db_session):
