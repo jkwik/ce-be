@@ -292,7 +292,7 @@ def test_get_client_template(client, db_session):
     db_session.refresh(template)
 
     # Retrieve template using api
-    url = '/client/template?id={}'.format(str(template.id))
+    url = '/client/template?client_template_id={}'.format(str(template.id))
     resp, code = request(client, "GET", url)
     assert code == 200
     assert resp != None
@@ -425,7 +425,7 @@ def test_get_client_session(client, db_session):
     assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
 
     # Retrieve a particular session from the client template
-    url = '/client/session?template_id={}&session_id={}'.format(client_template['id'], client_template['sessions'][0]['id'])
+    url = '/client/session?client_session_id={}'.format(client_template['id'], client_template['sessions'][0]['id'])
     client_session, code = request(client, 'GET', url)
     assert code == 200
     assert client_session != None

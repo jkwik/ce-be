@@ -34,13 +34,19 @@ def getClientTemplates(token_claims):
 @http_guard(renew=True, nullable=False)
 def getClientTemplate(token_claims):
     # Any logged in user should be able to access this method
-    id = request.args.get('id')
-    if id == None:
+    id = request.args.get('client_template_id')
+    slug = request.args.get('client_template_slug')
+
+    if (id == None and slug == None) or (id != None and slug != None):
         return {
-            "error": "No query parameter id found in request"
+            "error": "Need to pass EITHER client_template_id or client_template_slug as a request parameter"
         }, 400
-    
-    template = ClientTemplate.query.filter_by(id=id).first()
+
+    template = ClientTemplate()
+    if id != None:
+        template = ClientTemplate.query.filter_by(id=id).first()
+    else:
+        template = ClientTemplate.query.filter_by(slug=slug).first()
 
     templateResult = client_template_schema.dump(template)
 
@@ -228,21 +234,35 @@ def updateClientTemplate(token_claims):
 @http_guard(renew=True, nullable=False)
 def getClientSession(token_claims):
     # Any logged in user should be able to access this method
-    template_id = request.args.get('template_id')
-    session_id = request.args.get('session_id')
-    if template_id == None:
+    session_id = request.args.get('client_session_id')
+    template_slug = request.args.get('client_template_slug')
+    session_slug = request.args.get('client_session_slug')
+
+    if (session_id == None and template_slug == None and session_slug == None) or (session_id != None and template_slug != None and session_slug != None):
         return {
-            "error": "No query parameter template_id found in request"
-        }, 400
-    if session_id == None:
-        return {
-            "error": "No query parameter session_id found in request"
+            "error": "Pass EITHER client_session_id OR client_template_slug + client_session_slug in the request parameter"
         }, 400
     
-    session = ClientSession.query.filter_by(id=session_id, client_template_id=template_id).first()
+    if session_id == None:
+        if (template_slug != None and session_slug == None) or (template_slug == None and session_slug != None) or (template_slug == None and session_slug == None):
+            return {
+                "error": "Pass EITHER client_session_id OR client_template_slug + client_session_slug in the request parameter"
+            }, 400
+    
+    session = ClientSession()
+    if session_id != None:
+        session = ClientSession.query.filter_by(id=session_id).first()
+    else:
+        client_template = ClientTemplate.query.filter_by(slug=template_slug).first()
+        if client_template == None:
+            return {
+                "error": "No client template found with slug: " + template_slug
+            }, 404
+        session = ClientSession.query.filter_by(slug=session_slug, client_template_id=client_template.id).first()
+
     if session == None:
         return {
-            "error": "No session found with template_id: " + template_id + " and session_id: " + session_id
+            "error": "No client session found"
         }, 404
 
     sessionResult = client_session_schema.dump(session)

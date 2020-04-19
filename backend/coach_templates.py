@@ -79,29 +79,37 @@ def coachSession(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+        }, 400
 
-    id = request.args.get('coach_session_id')
-    slug = request.args.get('coach_session_slug')
+    session_id = request.args.get('coach_session_id')
+    template_slug = request.args.get('coach_template_slug')
+    session_slug = request.args.get('coach_session_slug')
 
-    if (id == None and slug == None) or (id != None and slug != None):
+    if (session_id == None and template_slug == None and session_slug == None) or (session_id != None and template_slug != None and session_slug != None):
         return {
-            "error": "Pass EITHER coach_session_id OR coach_session_slug in the request parameter"
+            "error": "Pass EITHER coach_session_id OR coach_template_slug + coach_session_slug in the request parameter"
         }, 400
     
-    session = CoachSession()
-    if id != None:
-        session = CoachSession.query.filter_by(id=id).first()
-    else:
-        session = CoachSession.query.filter_by(slug=slug).first()
+    if session_id == None:
+        if (template_slug != None and session_slug == None) or (template_slug == None and session_slug != None) or (template_slug == None and session_slug == None):
+            return {
+                "error": "Pass EITHER coach_session_id OR coach_template_slug + coach_session_slug in the request parameter"
+            }, 400
 
-    if session == None and id != None:
+    session = CoachSession()
+    if session_id != None:
+        session = CoachSession.query.filter_by(id=session_id).first()
+    else:
+        coach_template = CoachTemplate.query.filter_by(slug=template_slug).first()
+        if coach_template == None:
+            return {
+                "error": "No coach template found with slug: " + template_slug
+            }, 404
+        session = CoachSession.query.filter_by(slug=session_slug, coach_template_id=coach_template.id).first()
+
+    if session == None:
         return {
-            "error": "Coach_session not found with given id: " + id
-        }, 404
-    elif session == None and slug != None:
-        return {
-            "error": "Coach_session not found with given slug: " + slug
+            "error": "No coach session found"
         }, 404
 
     result = coach_session_schema.dump(session)
