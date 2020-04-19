@@ -47,7 +47,7 @@ def coachTemplate(token_claims):
     
     if id == None:
         return {
-            "error": "No query parameter id found in request"
+            "error": "No query parameter coach_template_id found in request"
         }, 400
     
     template = CoachTemplate.query.filter_by(id=id).first()
