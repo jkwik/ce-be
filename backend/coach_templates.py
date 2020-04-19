@@ -44,17 +44,26 @@ def coachTemplate(token_claims):
     }, 400
 
     id = request.args.get('coach_template_id')
+    slug = request.args.get('coach_template_slug')
     
-    if id == None:
+    if (id == None and slug == None) or (id != None and slug != None):
         return {
-            "error": "No query parameter coach_template_id found in request"
+            "error": "Pass EITHER coach_template_id OR coach_template_slug in the request parameter"
         }, 400
     
-    template = CoachTemplate.query.filter_by(id=id).first()
+    template = CoachTemplate()
+    if id != None:        
+        template = CoachTemplate.query.filter_by(id=id).first()
+    else:
+        template = CoachTemplate.query.filter_by(slug=slug).first()
 
-    if template == None:
+    if template == None and id != None:
         return {
             "error": "Coach_template not found with given id: " + id
+        }, 404
+    elif template == None and slug != None:
+        return {
+            "error": "Coach_template not found with given slug: " + slug
         }
 
     result = coach_template_schema.dump(template)
@@ -73,17 +82,27 @@ def coachSession(token_claims):
     }, 400
 
     id = request.args.get('coach_session_id')
-    if id == None:
+    slug = request.args.get('coach_session_slug')
+
+    if (id == None and slug == None) or (id != None and slug != None):
         return {
-            "error": "No query parameter id found in request"
+            "error": "Pass EITHER coach_session_id OR coach_session_slug in the request parameter"
         }, 400
     
-    session = CoachSession.query.filter_by(id=id).first()
+    session = CoachSession()
+    if id != None:
+        session = CoachSession.query.filter_by(id=id).first()
+    else:
+        session = CoachSession.query.filter_by(slug=slug).first()
 
-    if session == None:
+    if session == None and id != None:
         return {
             "error": "Coach_session not found with given id: " + id
-        }
+        }, 404
+    elif session == None and slug != None:
+        return {
+            "error": "Coach_session not found with given slug: " + slug
+        }, 404
 
     result = coach_session_schema.dump(session)
     
