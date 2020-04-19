@@ -54,6 +54,7 @@ class ClientSession(db.Model):
     client_weight = db.Column(db.Integer, nullable=True)
     comment = db.Column(db.String, nullable=True)
     name = db.Column(db.String, nullable=False)
+    slug = db.Column(db.String, nullable=False)
     order = db.Column(db.Integer, nullable=False)
     completed = db.Column(db.Boolean, nullable=False)
     # many to one relationship with CLient_templates table
@@ -67,7 +68,7 @@ class ClientSessionSchema(ma.Schema):
     exercises = ma.Nested(ClientExerciseSchema, many=True)
     training_entries = ma.Nested(TrainingEntrySchema, many=True)
     class Meta:
-        fields = ('id','client_weight', 'comment', 'name', 'order', 'completed', 'client_template_id', 'exercises', 'training_entries')
+        fields = ('id','client_weight', 'comment', 'name', 'slug', 'order', 'completed', 'client_template_id', 'exercises', 'training_entries')
 
 client_session_schema = ClientSessionSchema()
 client_session_schemas = ClientSessionSchema(many=True)
@@ -75,7 +76,7 @@ client_session_schemas = ClientSessionSchema(many=True)
 # This schema is used to for the templates to pull partial information about sessions
 class PartialClientSessionSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'order', 'completed')
+        fields = ('id', 'name', 'slug', 'order', 'completed')
 
 # Client_templates Table
 class ClientTemplate(db.Model):
@@ -83,6 +84,7 @@ class ClientTemplate(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
+    slug = db.Column(db.String, nullable=False)
     start_date = db.Column(db.String, nullable=False)
     end_date = db.Column(db.String, nullable=True)
     # many to one relationship with Users table
@@ -104,7 +106,7 @@ class ClientTemplateSchema(ma.Schema):
     sessions = ma.Nested(PartialClientSessionSchema, many=True)
     user = ma.Nested(PartialUserSchema, many=False)
     class Meta:
-        fields = ('id', 'name', 'start_date', 'end_date', 'user_id', 'completed', 'sessions', 'user', 'active')
+        fields = ('id', 'name', 'slug', 'start_date', 'end_date', 'user_id', 'completed', 'sessions', 'user', 'active')
 
 client_template_schema = ClientTemplateSchema()
 client_template_schemas = ClientTemplateSchema(many=True)

@@ -7,6 +7,7 @@ from sqlalchemy import func
 from backend.models.user import Role
 from backend.models.coach_templates import CoachTemplate, coach_template_schema, coach_template_schemas, coach_session_schema, coach_session_schemas, Exercise, coach_exercise_schema, CoachSession, coach_exercise_schemas, CoachExercise, exercise_schemas, exercise_schema
 from backend.helpers.coach_templates import setNonNullCoachSessionFields, isSessionPresent
+from slugify import slugify
 
 # Iteration 2
 # Return a list of templates the coach has created from the Templates table
@@ -43,17 +44,26 @@ def coachTemplate(token_claims):
     }, 400
 
     id = request.args.get('coach_template_id')
+    slug = request.args.get('coach_template_slug')
     
-    if id == None:
+    if (id == None and slug == None) or (id != None and slug != None):
         return {
-            "error": "No query parameter id found in request"
+            "error": "Pass EITHER coach_template_id OR coach_template_slug in the request parameter"
         }, 400
     
-    template = CoachTemplate.query.filter_by(id=id).first()
+    template = CoachTemplate()
+    if id != None:        
+        template = CoachTemplate.query.filter_by(id=id).first()
+    else:
+        template = CoachTemplate.query.filter_by(slug=slug).first()
 
-    if template == None:
+    if template == None and id != None:
         return {
             "error": "Coach_template not found with given id: " + id
+        }, 404
+    elif template == None and slug != None:
+        return {
+            "error": "Coach_template not found with given slug: " + slug
         }
 
     result = coach_template_schema.dump(template)
@@ -69,20 +79,38 @@ def coachSession(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+        }, 400
 
-    id = request.args.get('coach_session_id')
-    if id == None:
+    session_id = request.args.get('coach_session_id')
+    template_slug = request.args.get('coach_template_slug')
+    session_slug = request.args.get('coach_session_slug')
+
+    if (session_id == None and template_slug == None and session_slug == None) or (session_id != None and template_slug != None and session_slug != None):
         return {
-            "error": "No query parameter id found in request"
+            "error": "Pass EITHER coach_session_id OR coach_template_slug + coach_session_slug in the request parameter"
         }, 400
     
-    session = CoachSession.query.filter_by(id=id).first()
+    if session_id == None:
+        if (template_slug != None and session_slug == None) or (template_slug == None and session_slug != None) or (template_slug == None and session_slug == None):
+            return {
+                "error": "Pass EITHER coach_session_id OR coach_template_slug + coach_session_slug in the request parameter"
+            }, 400
+
+    session = CoachSession()
+    if session_id != None:
+        session = CoachSession.query.filter_by(id=session_id).first()
+    else:
+        coach_template = CoachTemplate.query.filter_by(slug=template_slug).first()
+        if coach_template == None:
+            return {
+                "error": "No coach template found with slug: " + template_slug
+            }, 404
+        session = CoachSession.query.filter_by(slug=session_slug, coach_template_id=coach_template.id).first()
 
     if session == None:
         return {
-            "error": "Coach_session not found with given id: " + id
-        }
+            "error": "No coach session found"
+        }, 404
 
     result = coach_session_schema.dump(session)
     
@@ -171,12 +199,15 @@ def createTemplate(token_claims):
             "error": "Template name already exists"
         }, 400
     
+    # If the template name is free, then we create a slug from it
+    template_slug = slugify(body['name'])
     
-    new_template = CoachTemplate(name=body['name'], sessions=[])
+    new_template = CoachTemplate(name=body['name'], sessions=[], slug=template_slug)
     # Enter each session and its corresponding coach exercises into the template
     for session in body['sessions']:
+        session_slug = slugify(session['name'])
         coach_session = CoachSession(
-            name=session['name'], order=session['order'], coach_exercises=[]
+            name=session['name'], slug=session_slug, order=session['order'], coach_exercises=[]
         )
         for coach_exercise in session['coach_exercises']:
             # Check if the exercise_id was supplied, if not then create a new exercise using the category and name
@@ -210,6 +241,7 @@ def createTemplate(token_claims):
         db.session.add(new_template)
         db.session.commit()
     except Exception as e:
+        print(e)
         return {
             "error": "Internal Server Error"
         }, 500
@@ -237,7 +269,20 @@ def createSession(token_claims):
         return {
             "error": "Must specify coach_template_id (integer) and name (string))"
         }, 400
+
+    coach_template = CoachTemplate.query.get(body['coach_template_id'])
+    if coach_template == None:
+        return {
+            "error": "No coach template found with the supplied coach_template_id"
+        }, 404
     
+    # Check for duplicate session name
+    coach_session = CoachSession.query.filter_by(coach_template_id=coach_template.id, name=body['name']).first()
+    if coach_session != None:
+        return {
+            "error": "Duplicate session name found"
+        }, 409
+
     # find current max order value for sessions belonging to the passed in coach_template_id
     max_order = db.session.query(func.max(CoachSession.order)).filter_by(coach_template_id=body['coach_template_id']).scalar()
     
@@ -248,8 +293,14 @@ def createSession(token_claims):
         # increment the order by 1
         max_order += 1
 
+    # create a slug based on the session name
+    session_slug = slugify(body['name'])
+
     # create the new session with name, coach_template_id, and order
-    new_session = CoachSession(name=body['name'], coach_template_id=body['coach_template_id'], order=max_order, coach_exercises=[])
+    new_session = CoachSession(
+        name=body['name'], slug=session_slug, coach_template_id=body['coach_template_id'],
+        order=max_order, coach_exercises=[]
+    )
 
     # Check if they passed in coach_exercises
     if 'coach_exercises' in body:
