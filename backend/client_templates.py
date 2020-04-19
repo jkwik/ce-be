@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry, CheckIn, check_in_schema
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -454,3 +454,43 @@ def updateClientSession(token_claims):
         raise
 
     return client_session_schema.dump(client_session)
+
+@app.route("/checkin", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCheckin(token_claims):
+    checkin_id = request.args.get('checkin_id')
+    if checkin_id == None:
+        return {
+            "error": "No query parameter checkin_id found in request"
+        }, 400
+    # get the checkin from the Checkins table with given checkin_id
+    checkin = CheckIn.query.filter_by(id=checkin_id).first()
+    if checkin == None:
+        return {
+        "error": "No checkin found with supplied checkin_id"
+    }, 404
+
+    split_end_date = checkin.end_date.split('-')
+    split_start_date = checkin.start_date.split('-')
+    checkin_end_date = date(int(split_end_date[0]), int(split_end_date[1]), int(split_end_date[2]))
+    checkin_start_date = date(int(split_start_date[0]), int(split_start_date[1]), int(split_start_date[2]))
+
+    print(checkin_end_date)
+    print(checkin_start_date)
+    # get the client tempalte that the given checken corresponds to
+    client_template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
+    if client_template == None:
+        return {
+        "error": "No client template found with supplied checkin_id"
+    }, 404
+    
+    # for session in client_template.sessions:
+    #     session_completed_date = session.completed_date
+    #     if session.completed_date
+  
+
+    result = check_in_schema.dump(checkin)
+
+    return {
+        "checkin": result
+    }
