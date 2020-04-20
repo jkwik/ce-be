@@ -78,7 +78,7 @@ client_session_schemas = ClientSessionSchema(many=True)
 # This schema is used to for the templates to pull partial information about sessions
 class PartialClientSessionSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'slug', 'order', 'completed')
+        fields = ('id', 'name', 'slug', 'order', 'completed', 'completed_date')
 
 # Client_templates Table
 class ClientTemplate(db.Model):

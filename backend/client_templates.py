@@ -497,6 +497,7 @@ def getCheckin(token_claims):
         }, 400
     # get the checkin from the Checkins table with given checkin_id
     checkin = CheckIn.query.filter_by(id=checkin_id).first()
+
     if checkin == None:
         return {
         "error": "No checkin found with supplied checkin_id"
@@ -511,14 +512,15 @@ def getCheckin(token_claims):
         return {
         "error": "No client template found with supplied checkin_id"
     }, 404
-    
+
     # this array will store the sessions that were completed within the span of the given checkin's start and end dates
     valid_sessions = []
 
-    # # loop through every session belonging to the client_template corresponding to the given checkin_id
+    # loop through every session belonging to the client_template corresponding to the given checkin_id
     for session in client_template.sessions:
-        # format session_completed_date
-        session_completed_date = dt.strptime(str(session.completed_date), '%Y-%m-%d')
+        # format session_completed_date only if the session is completed
+        if session.completed == True:
+            session_completed_date = dt.strptime(str(session.completed_date), '%Y-%m-%d')
         # if a session is incomplete or if a session has been completed after the start date of this checkin, return this session (valid session)
         if session.completed == False or session_completed_date > checkin_start_date:
             valid_sessions.append(session)
