@@ -648,7 +648,7 @@ def generate_client_template_model(active=True):
     return ClientTemplate(
         name='Test Client Template', start_date='2020-12-12', completed=False, active=active, sessions=[
             ClientSession(
-                name='Test Session 1', order=1, completed=False, exercises=[
+                name='Test Session 1', order=1, completed=False, completed_date='2020-12-13', exercises=[
                     ClientExercise(
                         sets=3, reps=12, weight=225, category='Lower Back', name='Deadlifts', order=1
                     )
@@ -961,3 +961,33 @@ def test_put_coach_session(client, db_session):
     assert resp != None
     assert len(resp['coach_exercises']) == 1
     assert resp['name'] == 'Coach session name change'
+
+
+
+# CHECKINS
+def test_get_checkin(client, db_session):
+   # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert client_template != None
+    assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
+
+    # Retrieve a particular session from the client template
+    url = '/client/session?template_id={}&session_id={}'.format(client_template['id'], client_template['sessions'][0]['id'])
+    client_session, code = request(client, 'GET', url)
+    assert code == 200
+    assert client_session != None
+    assert client_session['id'] == client_template['sessions'][0]['id']

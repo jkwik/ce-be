@@ -118,8 +118,8 @@ class CheckIn(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # many to one relationship with CLient_templates table
     client_template_id = db.Column(db.Integer, db.ForeignKey('Client_templates.id'), nullable=False)
-    coach_comment = db.Column(db.String, nullable=False)
-    client_comment = db.Column(db.String, nullable=False)
+    coach_comment = db.Column(db.String, nullable=True)
+    client_comment = db.Column(db.String, nullable=True)
     start_date = db.Column(db.String, nullable=False)
     end_date = db.Column(db.String, nullable=False)
     completed = db.Column(db.Boolean, nullable=False)
