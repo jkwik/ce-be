@@ -42,7 +42,6 @@ def setNonNullClientSessionFields(client_session, fields):
     """
     Sets the metadata values in a client_session based on a supplied dictionary of fields. It ignores exercises and training_entries as that should be handled
     through a separate endpoint.
-    NOTE: If completed is passed as true for a session, it automatically sets the current date as the completed_date
         - fields:
             {
                 "client_weight": 150
