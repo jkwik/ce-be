@@ -1,6 +1,7 @@
 from backend import db
 from sqlalchemy import func
 from backend.models.client_templates import ClientSession
+from datetime import date
 
 def findNextSessionOrder(client_template_id):
     """
@@ -40,7 +41,7 @@ def setNonNullClientTemplateFields(client_template, fields):
 def setNonNullClientSessionFields(client_session, fields):
     """
     Sets the metadata values in a client_session based on a supplied dictionary of fields. It ignores exercises and training_entries as that should be handled
-    through a separate endpoint
+    through a separate endpoint.
         - fields:
             {
                 "client_weight": 150

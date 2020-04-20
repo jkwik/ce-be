@@ -6,7 +6,7 @@ import pdb
 import unittest
 from backend import app, db, bcrypt
 from backend.models.user import User, UserSchema, user_schema, Role
-from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise
+from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -340,10 +340,14 @@ def test_post_client_template(client, db_session):
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
     # Create the client template, this function returns the coach_template used to assign to a client
-    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    # This also creates checkins so we can check that functionality
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
+    check_ins = db_session.query(CheckIn).all()
     assert code == 200
     assert resp != None
     assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+    assert check_ins != None
+    assert len(check_ins) == 2
 
     # Create a second client template to test slugification
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=3)
@@ -717,7 +721,7 @@ def generate_coach_template_model(db_session, id):
 
 # This method creates a client template by first creating a coach_template, then assigning it to a client.
 # It returns (response, code, coach_template)
-def create_client_template(client, db_session, client_id, starting_exercise_id=1):
+def create_client_template(client, db_session, client_id, starting_exercise_id=1, create_checkins=False):
     # Create a coach template to assign to a client
     coach_template = generate_coach_template_model(db_session, starting_exercise_id)
     db_session.add(coach_template)
@@ -741,6 +745,9 @@ def create_client_template(client, db_session, client_id, starting_exercise_id=1
                 'weight': 315
             })
         data['sessions'].append(session)
+
+    if create_checkins:
+        data['check_ins'] = ['2020-10-07', '2020-10-14']
 
     resp, code = request(client, "POST", '/client/template', data=data)
     return resp, code, coach_template

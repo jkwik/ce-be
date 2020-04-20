@@ -63,12 +63,14 @@ class ClientSession(db.Model):
     exercises = db.relationship('ClientExercise', cascade="all, delete-orphan", lazy=True, order_by="ClientExercise.order")
     # one to many relationship with Training_entries table
     training_entries = db.relationship('TrainingEntry', cascade="all, delete-orphan", lazy=True, order_by="TrainingEntry.order")
+    completed_date = db.Column(db.String, nullable=True)
+
 
 class ClientSessionSchema(ma.Schema):
     exercises = ma.Nested(ClientExerciseSchema, many=True)
     training_entries = ma.Nested(TrainingEntrySchema, many=True)
     class Meta:
-        fields = ('id','client_weight', 'comment', 'name', 'slug', 'order', 'completed', 'client_template_id', 'exercises', 'training_entries')
+        fields = ('id','client_weight', 'comment', 'name', 'slug', 'order', 'completed', 'client_template_id', 'exercises', 'training_entries', 'completed_date')
 
 client_session_schema = ClientSessionSchema()
 client_session_schemas = ClientSessionSchema(many=True)
@@ -116,16 +118,19 @@ class CheckIn(db.Model):
     __tablename__ = "Check_ins"
 
     id = db.Column(db.Integer, primary_key=True)
-    time = db.Column(db.String, nullable=False)
     # many to one relationship with CLient_templates table
     client_template_id = db.Column(db.Integer, db.ForeignKey('Client_templates.id'), nullable=False)
-    comment = db.Column(db.String, nullable=False)
+    coach_comment = db.Column(db.String, nullable=True)
+    client_comment = db.Column(db.String, nullable=True)
+    start_date = db.Column(db.String, nullable=False)
+    end_date = db.Column(db.String, nullable=True)
+    completed = db.Column(db.Boolean, nullable=False)
 
 
 
 class CheckInSchema(ma.Schema):
     class Meta:
-        fields = ('id','time', 'client_template_id', 'comment')
+        fields = ('id', 'client_template_id', 'coach_comment', 'client_comment', 'start_date', 'end_date', 'completed')
 
 check_in_schema = CheckInSchema()
 check_in_schemas = CheckInSchema(many=True) 

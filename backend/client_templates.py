@@ -1,14 +1,17 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry, CheckIn, check_in_schema
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
-from datetime import date
+from datetime import datetime as dt
+from datetime import date, timedelta
 from slugify import slugify
+
+DATE_FORMAT = '%Y-%m-%d'
 
 @app.route("/client/templates", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -116,7 +119,7 @@ def createClientTemplate(token_claims):
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
         name=coach_template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
-        completed=False, active=True, sessions=[]
+        completed=False, active=True, sessions=[], check_ins=[]
     )
     # Set all other client templates if there are any to active false
     try:
@@ -155,6 +158,35 @@ def createClientTemplate(token_claims):
                 )
             )
         client_template.sessions.append(client_session)
+
+    # For each check_in date in the body, create a new check_in object for the template
+    if 'check_ins' in body:
+        for i, check_in_start_date in enumerate(body['check_ins']):
+            client_check_in = CheckIn(completed=False)
+            parsed_start_date = None
+
+            # Sanity check the format of the start_date by parsing it
+            try:
+                parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
+            except Exception as e:
+                return {
+                    "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
+                }, 400
+            client_check_in.start_date = str(parsed_start_date)
+
+            # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
+            if i != len(body['check_ins']) - 1:
+                try:
+                    parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
+                    client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
+                except Exception as e:
+                    return {
+                        "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
+                    }
+            else:
+                client_check_in.end_date = None
+            
+            client_template.check_ins.append(client_check_in)
 
     try:
         # create new template in CoachTemplate table
@@ -454,3 +486,43 @@ def updateClientSession(token_claims):
         raise
 
     return client_session_schema.dump(client_session)
+
+@app.route("/checkin", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCheckin(token_claims):
+    checkin_id = request.args.get('checkin_id')
+    if checkin_id == None:
+        return {
+            "error": "No query parameter checkin_id found in request"
+        }, 400
+    # get the checkin from the Checkins table with given checkin_id
+    checkin = CheckIn.query.filter_by(id=checkin_id).first()
+    if checkin == None:
+        return {
+        "error": "No checkin found with supplied checkin_id"
+    }, 404
+
+    split_end_date = checkin.end_date.split('-')
+    split_start_date = checkin.start_date.split('-')
+    checkin_end_date = date(int(split_end_date[0]), int(split_end_date[1]), int(split_end_date[2]))
+    checkin_start_date = date(int(split_start_date[0]), int(split_start_date[1]), int(split_start_date[2]))
+
+    print(checkin_end_date)
+    print(checkin_start_date)
+    # get the client tempalte that the given checken corresponds to
+    client_template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
+    if client_template == None:
+        return {
+        "error": "No client template found with supplied checkin_id"
+    }, 404
+    
+    # for session in client_template.sessions:
+    #     session_completed_date = session.completed_date
+    #     if session.completed_date
+  
+
+    result = check_in_schema.dump(checkin)
+
+    return {
+        "checkin": result
+    }
