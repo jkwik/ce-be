@@ -46,6 +46,7 @@ class CoachSession(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
+    slug = db.Column(db.String, nullable=False)
     order = db.Column(db.Integer, nullable=False)
     # many to 1 relationship with Coach_templates table
     coach_template_id = db.Column(db.Integer, db.ForeignKey('Coach_templates.id'), nullable=False)
@@ -55,7 +56,7 @@ class CoachSession(db.Model):
 class CoachSessionSchema(ma.Schema):
     coach_exercises = ma.Nested(CoachExerciseSchema, many=True)
     class Meta:
-        fields = ('id', 'name', 'order', 'coach_template_id', 'coach_exercises')
+        fields = ('id', 'name', 'slug', 'order', 'coach_template_id', 'coach_exercises')
 
 coach_session_schema = CoachSessionSchema()
 coach_session_schemas = CoachSessionSchema(many=True)
@@ -63,7 +64,7 @@ coach_session_schemas = CoachSessionSchema(many=True)
 # this schema is used for retrieving partial information about a session
 class PartialCoachSessionSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'order')
+        fields = ('id', 'name', 'slug', 'order')
 
 
 
@@ -73,13 +74,14 @@ class CoachTemplate(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String)
+    slug = db.Column(db.String, nullable=False)
     # 1 to many relationship with Coach_sessions table
     sessions = db.relationship('CoachSession', cascade="all, delete-orphan", lazy=True, order_by="CoachSession.order")
 
 class CoachTemplateSchema(ma.Schema):
     sessions = ma.Nested(PartialCoachSessionSchema, many=True)
     class Meta:
-        fields = ('id', 'name', 'sessions')
+        fields = ('id', 'name', 'sessions', 'slug')
 
 coach_template_schema = CoachTemplateSchema()
 coach_template_schemas = CoachTemplateSchema(many=True)
