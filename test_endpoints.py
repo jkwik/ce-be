@@ -1099,17 +1099,6 @@ def test_get_client_checkins(client, db_session):
 
     assert session1 != None and session2 != None
     assert session1['completed_date'] == '2020-10-08' and session2['completed_date'] == '2020-10-09'
-    
-    # retrieve a checkin
-    check_in = db_session.query(CheckIn).first()  
-    assert code == 200
-    assert resp != None
-    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
-    assert check_in != None
-
-    # format date string
-    date_split = check_in.start_date.split(' ')
-    check_in.start_date = date_split[0]
 
     # Retrieve sessions from a particular checkin corresponding to the created client_template_id
     url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
