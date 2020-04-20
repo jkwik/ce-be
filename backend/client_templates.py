@@ -541,7 +541,7 @@ def getClientCheckins(token_claims):
         return {
             "error": "No query parameter client_id found in request"
         }, 400
-    # get the client_template that this client has been assigned to, given the client_id
+    # get the client_templates that this client has been assigned to (past or present), given the client_id
     client_templates = ClientTemplate.query.filter_by(user_id=client_id).all()
 
     if client_templates == None:
@@ -558,7 +558,7 @@ def getClientCheckins(token_claims):
             return {
             "error": "No checkins found with the given client_id"
         }, 404
-        # for each checkin in the checkins found in through client_templates, add them to a checkins list
+        # for each checkin found through client_templates, add them to a checkins list
         for checkin in checkins_found:
             checkins_arr.append(checkin)
 

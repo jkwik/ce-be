@@ -1018,28 +1018,31 @@ def test_get_checkin(client, db_session):
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
 
     # Update a particular client session, we will update the first client session
-    data = {
-        'id': resp['sessions'][0]['id'],
-        'name': 'Client session name change 2',
-        'completed': True,
-        'completed_date': '2020-10-08'
-    }
+    # make completed = True and add the completed_date
+    session = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
+    try:         
+        session['name'] = 'Client session name changed'
+        session['completed'] = True
+        session['completed_date'] = '2020-10-08'
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
 
-    update_resp, code = request(client, "PUT", '/client/session', data=data)
-    assert code == 200
-    assert update_resp != None
-    assert update_resp['name'] == 'Client session name change 2'
-    assert update_resp['completed_date'] == data['completed_date']
+    assert session != None
+    assert session['name'] == 'Client session name changed'
+    assert session['completed_date'] == '2020-10-08'
 
     # check that the template reflects the session changes
-    url = '/client/template?client_template_id={}'.format(resp['id'])
-    get_resp, code = request(client, "GET", url)
-    assert code == 200
-    assert resp != None
-    assert get_resp['id'] == resp['id']
-    assert get_resp['sessions'][0]['completed_date'] == data['completed_date']
+    template = ClientTemplate.query.filter_by(id=resp['id'])
+    assert template != None
+    assert template['id'] == resp['id']
+    assert template['sessions'][0]['completed_date'] == '2020-10-08'
     
-    # This creates checkins so we can check that functionality
+    # retrieve a checkin
     check_in = db_session.query(CheckIn).first()  
     assert code == 200
     assert resp != None
@@ -1053,11 +1056,66 @@ def test_get_checkin(client, db_session):
     # Retrieve sessions from a particular checkin corresponding to the created client_template_id
     url = '/checkin?checkin_id={}'.format(check_in.id)
     checkin_resp, code = request(client, 'GET', url)
-    # pdb.set_trace()
     session_completed_date = dt.strptime(str(checkin_resp['sessions'][0]['completed_date']), '%Y-%m-%d')
-    checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d')
-    
+    checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d') 
     assert code == 200
     assert checkin_resp != None
     assert checkin_resp['sessions'][0]['completed'] == True
     assert session_completed_date > checkin_start_date
+
+def test_get_client_checkins(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+    # create a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
+
+    # Update a particular client session, we will update the first and second client sessions
+    # make completed = True and add the completed_date
+    session1 = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
+    session2 = ClientSession.query.filter_by(id=resp['sessions'][1]['id']).first()
+    try:         
+        session1['completed'] = True
+        session1['completed_date'] = '2020-10-08'
+        session2['completed'] = True
+        session2['completed_date'] = '2020-10-09'
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    assert session1 != None and session2 != None
+    assert session1['completed_date'] == '2020-10-08' and session2['completed_date'] == '2020-10-09'
+    
+    # retrieve a checkin
+    check_in = db_session.query(CheckIn).first()  
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+    assert check_in != None
+
+    # format date string
+    date_split = check_in.start_date.split(' ')
+    check_in.start_date = date_split[0]
+
+    # Retrieve sessions from a particular checkin corresponding to the created client_template_id
+    url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
+    checkins, code = request(client, 'GET', url)
+    assert code == 200
+    assert checkins != None 
+    assert checkins['sessions'][0]['id'] == session1['id'] and checkins['sessions'][1]['id'] == session2['id']
+    assert checkins['sessions'][0]['completed'] == True and checkins['sessions'][1]['completed']
+    assert checkins['sessions'][0]['completed_date'] == session1['completed_date'] and checkins['sessions'][1]['completed_date'] == session2['completed_date']
