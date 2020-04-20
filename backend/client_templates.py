@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, TrainingEntry, CheckIn, check_in_schema
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -450,7 +450,7 @@ def updateClientSession(token_claims):
 
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
-
+    
     # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
     if 'exercises' in body:
         client_exercises = []
@@ -497,32 +497,38 @@ def getCheckin(token_claims):
         }, 400
     # get the checkin from the Checkins table with given checkin_id
     checkin = CheckIn.query.filter_by(id=checkin_id).first()
+
     if checkin == None:
         return {
         "error": "No checkin found with supplied checkin_id"
     }, 404
 
-    split_end_date = checkin.end_date.split('-')
-    split_start_date = checkin.start_date.split('-')
-    checkin_end_date = date(int(split_end_date[0]), int(split_end_date[1]), int(split_end_date[2]))
-    checkin_start_date = date(int(split_start_date[0]), int(split_start_date[1]), int(split_start_date[2]))
+    # format the checkin_start_date and checkin_end_date so that we can compare them to the session_completed_date
+    checkin_start_date = dt.strptime(str(checkin.start_date), '%Y-%m-%d')
 
-    print(checkin_end_date)
-    print(checkin_start_date)
-    # get the client tempalte that the given checken corresponds to
+    # get the client templatee that the given checkin_id corresponds to
     client_template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
     if client_template == None:
         return {
         "error": "No client template found with supplied checkin_id"
     }, 404
-    
-    # for session in client_template.sessions:
-    #     session_completed_date = session.completed_date
-    #     if session.completed_date
-  
 
-    result = check_in_schema.dump(checkin)
+    # this array will store the sessions that were completed within the span of the given checkin's start and end dates
+    valid_sessions = []
+
+    # loop through every session belonging to the client_template corresponding to the given checkin_id
+    for session in client_template.sessions:
+        # format session_completed_date only if the session is completed
+        if session.completed == True:
+            session_completed_date = dt.strptime(str(session.completed_date), '%Y-%m-%d')
+        # if a session is incomplete or if a session has been completed after the start date of this checkin, return this session (valid session)
+        if session.completed == False or session_completed_date > checkin_start_date:
+            valid_sessions.append(session)
+  
+    checkin_result = check_in_schema.dump(checkin)
+    session_result = client_session_schemas.dump(valid_sessions)
 
     return {
-        "checkin": result
+        "check_in": checkin_result,
+        "sessions": session_result
     }
