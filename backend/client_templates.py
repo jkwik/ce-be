@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -531,4 +531,41 @@ def getCheckin(token_claims):
     return {
         "check_in": checkin_result,
         "sessions": session_result
+    }
+
+@app.route("/client/checkins", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getClientCheckins(token_claims):
+    client_id = request.args.get('client_id')
+    if client_id == None:
+        return {
+            "error": "No query parameter client_id found in request"
+        }, 400
+    # get the client_templates that this client has been assigned to (past or present), given the client_id
+    client_templates = ClientTemplate.query.filter_by(user_id=client_id).all()
+
+    if client_templates == None:
+        return {
+        "error": "No client_templates found with supplied client_id"
+        }, 404
+
+    checkins_arr = []
+    # for each client_template, get the corresponding checkins
+    for template in client_templates:
+        # get checkins with the given client_template_id
+        checkins_found = CheckIn.query.filter_by(client_template_id=template.id).all()
+        if checkins_found == None:
+            return {
+            "error": "No checkins found with the given client_id"
+        }, 404
+        # for each checkin found through client_templates, add them to a checkins list
+        for checkin in checkins_found:
+            checkins_arr.append(checkin)
+
+    # sort the checkins by start_date
+    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date, reverse=True)
+    checkin_results = check_in_schemas.dump(checkins_arr)
+
+    return {
+        "check_ins": checkin_results
     }
