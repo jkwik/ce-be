@@ -1000,6 +1000,46 @@ def test_put_coach_session(client, db_session):
 
 
 # CHECKINS
+def test_get_checkins(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Create 2 clients so we can create check_ins for them
+    client_user_1 = sign_up_user_for_testing(client, test_client)
+    assert client_user_1['user'] != None
+    assert client_user_1['user']['role'] == 'CLIENT'
+    client_user_2 = sign_up_user_for_testing(client, {
+        'first_name': 'test',
+        'last_name': 'client',
+        'email': 'test_2@client.com',
+        'password': 'fakepassword',
+        'role': 'CLIENT'
+    })
+    assert client_user_2['user'] != None
+    assert client_user_2['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a client_template for each client
+    resp, code, _ = create_client_template(client, db_session, client_user_1['user']['id'], create_checkins=True)
+    assert code == 200
+    assert resp != None
+    resp, code, _ = create_client_template(client, db_session, client_user_2['user']['id'], create_checkins=True, starting_exercise_id=3)
+    assert code == 200
+    assert resp != None
+
+    # Retrieve the list of all check_ins for all users, each user should have 2 check ins
+    resp, code = request(client, "GET", "/checkins")
+    assert code == 200
+    assert resp != None
+    assert len(resp['users']) == 2
+    for user in resp['users']:
+        assert len(user['check_ins']) == 2
+
 def test_get_checkin(client, db_session):
    # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)

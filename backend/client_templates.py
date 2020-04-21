@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
-from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema
+from backend.models.user import User, Role, user_schemas
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -172,13 +172,13 @@ def createClientTemplate(token_claims):
                 return {
                     "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
                 }, 400
-            client_check_in.start_date = str(parsed_start_date)
+            client_check_in.start_date = parsed_start_date.strftime(DATE_FORMAT)
 
             # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
             if i != len(body['check_ins']) - 1:
                 try:
                     parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
-                    client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
+                    client_check_in.end_date = (parsed_next_start_date - timedelta(days=1)).strftime(DATE_FORMAT)
                 except Exception as e:
                     return {
                         "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
@@ -531,4 +531,30 @@ def getCheckin(token_claims):
     return {
         "check_in": checkin_result,
         "sessions": session_result
+    }
+
+@app.route("/checkins", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCheckins(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "User must be of type COACH to call endpoint"
+        }, 401
+
+    # Grab all CLIENTS
+    users = db.session.query(User.id, User.first_name, User.last_name).filter_by(role=Role.CLIENT.name).all()
+    users_result = user_schemas.dump(users)
+
+    # For each user, retrieve all their client_templates and all the checkins associated with them.
+    for user in users_result:
+        user['check_ins'] = []
+        template_ids = db.session.query(ClientTemplate.id).filter_by(user_id = user['id']).order_by(ClientTemplate.start_date.desc()).all()
+        
+        for template_id in template_ids:
+            check_ins = CheckIn.query.filter_by(client_template_id = template_id[0]).order_by(CheckIn.start_date.desc()).all()
+            check_ins_result = check_in_schemas.dump(check_ins)
+            user['check_ins'] += check_ins_result
+
+    return {
+        "users": users_result
     }
