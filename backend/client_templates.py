@@ -563,7 +563,7 @@ def getClientCheckins(token_claims):
             checkins_arr.append(checkin)
 
     # sort the checkins by start_date
-    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date)
+    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date, reverse=True)
     checkin_results = check_in_schemas.dump(checkins_arr)
 
     return {

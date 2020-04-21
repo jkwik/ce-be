@@ -1016,6 +1016,9 @@ def test_get_checkin(client, db_session):
 
     # Create the client template, this function returns the coach_template used to assign to a client
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
 
     # Update a particular client session, we will update the first client session
     # make completed = True and add the completed_date
@@ -1044,9 +1047,6 @@ def test_get_checkin(client, db_session):
     
     # retrieve a checkin
     check_in = db_session.query(CheckIn).first()  
-    assert code == 200
-    assert resp != None
-    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
     assert check_in != None
 
     # format date string
@@ -1068,6 +1068,7 @@ def test_get_client_checkins(client, db_session):
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
     assert coach_user['user']['role'] == 'COACH'
+    
     # create a client
     client_user = sign_up_user_for_testing(client, test_client)
     assert client_user['user'] != None
@@ -1079,32 +1080,26 @@ def test_get_client_checkins(client, db_session):
 
     # Create the client template, this function returns the coach_template used to assign to a client
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
 
     # Update a particular client session, we will update the first and second client sessions
-    # make completed = True and add the completed_date
     session1 = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
     session2 = ClientSession.query.filter_by(id=resp['sessions'][1]['id']).first()
-    try:         
-        session1['completed'] = True
-        session1['completed_date'] = '2020-10-08'
-        session2['completed'] = True
-        session2['completed_date'] = '2020-10-09'
-        db.session.commit()
-    except Exception as e:
-        print(e)
-        return {
-            "error": "Internal Server Error"
-        }, 500
-        raise
-
+    # make completed = True and add the completed_date   
+    session1.completed = True
+    session1.completed_date = '2020-10-08'
+    session2.completed = True
+    session2.completed_date = '2020-10-09'
+    db.session.commit()
     assert session1 != None and session2 != None
-    assert session1['completed_date'] == '2020-10-08' and session2['completed_date'] == '2020-10-09'
+    assert session1.completed_date == '2020-10-08' and session2.completed_date == '2020-10-09'
 
     # Retrieve sessions from a particular checkin corresponding to the created client_template_id
     url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
-    checkins, code = request(client, 'GET', url)
+    checkins, code = request(client, 'GET', url)    
     assert code == 200
-    assert checkins != None 
-    assert checkins['sessions'][0]['id'] == session1['id'] and checkins['sessions'][1]['id'] == session2['id']
-    assert checkins['sessions'][0]['completed'] == True and checkins['sessions'][1]['completed']
-    assert checkins['sessions'][0]['completed_date'] == session1['completed_date'] and checkins['sessions'][1]['completed_date'] == session2['completed_date']
+    assert checkins != None
+    # check ordering, later dates should appear before earlier dates
+    assert checkins['check_ins'][0]['start_date'] == '2020-10-14' and checkins['check_ins'][1]['start_date'] == '2020-10-07'
