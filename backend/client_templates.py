@@ -430,6 +430,11 @@ def updateClientSession(token_claims):
 
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
+
+    # If they are completing a session (completed=True), then set the completed date to template start_date + session order (in days)
+    if 'completed' in body:
+        if body['completed'] == True:
+            client_session.completed_date = (dt.strptime(str(client_template.start_date), DATE_FORMAT) + timedelta(days=client_session.order)).strftime(DATE_FORMAT)
     
     # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
     if 'exercises' in body:
