@@ -119,7 +119,7 @@ def createClientTemplate(token_claims):
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
         name=coach_template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
-        completed=False, active=True, sessions=[], check_ins=[]
+        completed=False, active=True, sessions=[]
     )
     # Set all other client templates if there are any to active false
     try:
@@ -159,34 +159,14 @@ def createClientTemplate(token_claims):
             )
         client_template.sessions.append(client_session)
 
-    # For each check_in date in the body, create a new check_in object for the template
-    if 'check_ins' in body:
-        for i, check_in_start_date in enumerate(body['check_ins']):
-            client_check_in = CheckIn(completed=False)
-            parsed_start_date = None
-
-            # Sanity check the format of the start_date by parsing it
-            try:
-                parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
-            except Exception as e:
-                return {
-                    "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
-                }, 400
-            client_check_in.start_date = str(parsed_start_date)
-
-            # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
-            if i != len(body['check_ins']) - 1:
-                try:
-                    parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
-                    client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
-                except Exception as e:
-                    return {
-                        "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
-                    }
-            else:
-                client_check_in.end_date = None
-            
-            client_template.check_ins.append(client_check_in)
+    # Create the check-in date by adding number of total sessions (as days) to todays date
+    check_in_start_date = date.today()
+    check_in_end_date = check_in_start_date + timedelta(days=len(client_template.sessions))
+    client_check_in = CheckIn(
+        completed=False, start_date=check_in_start_date.strftime(DATE_FORMAT),
+        end_date=check_in_end_date.strftime(DATE_FORMAT)
+    )
+    client_template.check_in = client_check_in
 
     try:
         # create new template in CoachTemplate table
