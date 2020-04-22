@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -466,6 +466,37 @@ def updateClientSession(token_claims):
         raise
 
     return client_session_schema.dump(client_session)
+
+@app.route("/client/trainingLog", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getTrainingLog(token_claims):
+    client_id = request.args.get('client_id')
+
+    if client_id == None:
+        return {
+            "error": "No query parameter client_id found in query parameter"
+        }, 400
+
+    # Grab all templates belonging to the client
+    client_templates = ClientTemplate.query.filter(ClientTemplate.user_id == client_id).all()
+
+    sessions = []
+
+    for client_template in client_templates:
+        # Grab all completed sessions belonging to the template
+        client_sessions = ClientSession.query.filter(
+            ClientSession.client_template_id == client_template.id, ClientSession.completed == True
+        ).order_by(ClientSession.completed_date.desc()).all()
+
+        sessions = sessions + client_sessions
+
+    sessions = sorted(sessions, key=lambda k: k.completed_date, reverse=True)
+
+    sessions_result = training_log_schemas.dump(sessions)
+
+    return {
+        "sessions": sessions_result
+    }
 
 @app.route("/checkin", methods=["GET"])
 @http_guard(renew=True, nullable=False)

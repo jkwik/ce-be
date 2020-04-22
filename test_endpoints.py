@@ -6,7 +6,7 @@ import pdb
 import unittest
 from backend import app, db, bcrypt
 from backend.models.user import User, UserSchema, user_schema, Role
-from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn
+from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -999,7 +999,44 @@ def test_put_coach_session(client, db_session):
     assert len(resp['coach_exercises']) == 1
     assert resp['name'] == 'Coach session name change'
 
+# TRAINING LOG
+def test_get_client_training_logs(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+    # create a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+    # Set one of the sessions as true and add a training entry
+    client_sessions = db_session.query(ClientSession).all()
+    assert client_sessions != None
+    assert len(client_sessions) == 2
+    client_sessions[0].completed = True
+    client_sessions[0].training_entries = [
+        TrainingEntry(
+            name='Test Exercise', category='Test Category', reps=10, sets=10, weight=150, order=1
+        )
+    ]
+    db_session.commit()
+
+    # Retrieve client training log and check that 1 session is included with 1 training entry
+    resp, code = request(client, "GET", "/client/trainingLog?client_id={}".format(client_user['user']['id']))
+    assert code == 200
+    assert len(resp['sessions']) == 1
+    assert len(resp['sessions'][0]['training_entries']) == 1
 
 # CHECKINS
 def test_get_checkins(client, db_session):
