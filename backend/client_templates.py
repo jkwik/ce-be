@@ -536,6 +536,11 @@ def getCheckin(token_claims):
 @app.route("/client/checkins", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientCheckins(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "Logged in user doesn't have a role of COACH"
+    }, 401
+
     client_id = request.args.get('client_id')
     if client_id == None:
         return {
@@ -549,26 +554,117 @@ def getClientCheckins(token_claims):
         "error": "No client_templates found with supplied client_id"
         }, 404
 
-    checkins_arr = []
-    # for each client_template, get the corresponding checkins
+    complete_checkins = []
+    incomplete_checkins = []
+    # for each client_template, get the corresponding checkin
     for template in client_templates:
-        # get checkins with the given client_template_id
-        checkins_found = CheckIn.query.filter_by(client_template_id=template.id).all()
-        if checkins_found == None:
-            return {
-            "error": "No checkins found with the given client_id"
-        }, 404
-        # for each checkin found through client_templates, add them to a checkins list
-        for checkin in checkins_found:
-            checkins_arr.append(checkin)
+        # get checkin with the given client_template_id
+        checkin = CheckIn.query.filter_by(client_template_id=template.id).first()
+        # this means that the client_template was made without a checkin
+        if checkin == None:
+            continue
+        # only include checkins that ended today or before today
+        today = dt.today().strftime('%Y-%m-%d')
+        if checkin.end_date <= today:
+            if checkin.completed == True:
+                complete_checkins.append(checkin)
+            else:
+                incomplete_checkins.append(checkin)
 
-    # sort the checkins by start_date
-    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date, reverse=True)
-    # sort again but by completed boolean
-    checkins_arr = sorted(checkins_arr, key=lambda k: k.completed)
+    # sort the completed checkins by start_date
+    complete_checkins = sorted(complete_checkins, key=lambda k: k.start_date, reverse=True)
+    # sort the incompleted checkins by start_date
+    incomplete_checkins = sorted(incomplete_checkins, key=lambda k: k.start_date, reverse=True)
 
-    checkin_results = check_in_schemas.dump(checkins_arr)
+    complete_checkin_results = check_in_schemas.dump(complete_checkins)
+    incomplete_checkin_results = check_in_schemas.dump(incomplete_checkins)
 
     return {
-        "check_ins": checkin_results
+        "complete": complete_checkin_results,
+        "incomplete": incomplete_checkin_results
     }
+
+@app.route("/submitCheckin", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def submitCheckin(token_claims):
+    if token_claims['role'] != Role.COACH.name or token_claims['role'] != Role.CLIENT.name:
+        return {
+            "error": "Logged in user doesn't have a role of COACH or CLIENT"
+        }, 401
+    
+    body = request.get_json(force=True)
+
+    if 'sesssions' in body:
+        # Iterate through sessions and create client_sessions, and client_exercises from them
+        for session in sessions:
+            coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
+            if coach_session == None:
+                return {
+                    "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
+                }, 404
+
+            # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
+            client_session = ClientSession(
+                name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
+            )
+            for coach_exercise in session['coach_exercises']:
+                exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
+                if exercise == None:
+                    return {
+                        "error": "No exercise found with id: " + str(session['id'])
+                    }
+
+                exercise_dump = coach_exercise_schema.dump(exercise)
+                client_session.exercises.append(
+                    ClientExercise(
+                        sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
+                        category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
+                    )
+                )
+            client_template.sessions.append(client_session)
+    
+    # For each check_in date in the body, create a new check_in object for the template
+    if 'check_ins' in body:
+        for i, check_in_start_date in enumerate(body['check_ins']):
+            client_check_in = CheckIn(completed=False)
+            parsed_start_date = None
+
+            # Sanity check the format of the start_date by parsing it
+            try:
+                parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
+            except Exception as e:
+                return {
+                    "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
+                }, 400
+            client_check_in.start_date = str(parsed_start_date)
+
+            # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
+            if i != len(body['check_ins']) - 1:
+                try:
+                    parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
+                    client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
+                except Exception as e:
+                    return {
+                        "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
+                    }
+            else:
+                client_check_in.end_date = None
+            
+            client_template.check_ins.append(client_check_in)
+
+    try:
+        # create new template in CoachTemplate table
+        db.session.add(client_template)
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    db.session.refresh(client_template)
+
+    result = client_template_schema.dump(client_template)
+
+    return result

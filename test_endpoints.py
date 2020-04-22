@@ -1084,22 +1084,11 @@ def test_get_client_checkins(client, db_session):
     assert resp != None
     assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
 
-    # Update a particular client session, we will update the first and second client sessions
-    session1 = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
-    session2 = ClientSession.query.filter_by(id=resp['sessions'][1]['id']).first()
-    # make completed = True and add the completed_date   
-    session1.completed = True
-    session1.completed_date = '2020-10-08'
-    session2.completed = True
-    session2.completed_date = '2020-10-09'
-    db.session.commit()
-    assert session1 != None and session2 != None
-    assert session1.completed_date == '2020-10-08' and session2.completed_date == '2020-10-09'
-
-    # Retrieve sessions from a particular checkin corresponding to the created client_template_id
+    # Retrieve check_ins with given client_id
     url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
-    checkins, code = request(client, 'GET', url)    
+    checkins, code = request(client, 'GET', url)
+    pdb.set_trace()
     assert code == 200
     assert checkins != None
     # check ordering, later dates should appear before earlier dates
-    assert checkins['check_ins'][0]['start_date'] == '2020-10-14' and checkins['check_ins'][1]['start_date'] == '2020-10-07'
+    assert checkins['uncompleted'][0]['start_date'] == '2020-10-14' and checkins['uncompleted'][1]['start_date'] == '2020-10-07'
