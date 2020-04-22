@@ -513,6 +513,34 @@ def getCheckin(token_claims):
         "sessions": session_result
     }
 
+@app.route("/checkins", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCheckins(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "User must be of type COACH to call endpoint"
+        }, 401
+
+    try:
+        # Grab all completed check_ins who's end_date is before todays date. Order this descending so the most recent one is viewed
+        completed_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == True).order_by(CheckIn.end_date.desc()).all()
+
+        # Grab all noncompleted check_ins whos end_date is before todays date. Order this ascending so the oldest one is viewed
+        noncompleted_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == False).order_by(CheckIn.end_date.desc()).all()
+
+        completed_check_ins_result = check_in_schemas.dump(completed_check_ins)
+        noncompleted_check_ins_result = check_in_schemas.dump(noncompleted_check_ins)
+
+        return {
+            "completed": completed_check_ins_result,
+            "uncompleted": noncompleted_check_ins_result
+        }
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        
 @app.route("/client/checkins", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientCheckins(token_claims):

@@ -1002,6 +1002,53 @@ def test_put_coach_session(client, db_session):
 
 
 # CHECKINS
+def test_get_checkins(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Create 2 clients so we can create check_ins for them
+    client_user_1 = sign_up_user_for_testing(client, test_client)
+    assert client_user_1['user'] != None
+    assert client_user_1['user']['role'] == 'CLIENT'
+    client_user_2 = sign_up_user_for_testing(client, {
+        'first_name': 'test',
+        'last_name': 'client',
+        'email': 'test_2@client.com',
+        'password': 'fakepassword',
+        'role': 'CLIENT'
+    })
+    assert client_user_2['user'] != None
+    assert client_user_2['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a client_template for each client, 1 check in should be created per template
+    resp, code, _ = create_client_template(client, db_session, client_user_1['user']['id'])
+    assert code == 200
+    assert resp != None
+    resp, code, _ = create_client_template(client, db_session, client_user_2['user']['id'], starting_exercise_id=3)
+    assert code == 200
+    assert resp != None
+
+    # Complete one of the checkins and change the end dates to be 1 day before today so they appear in the results
+    check_ins = db_session.query(CheckIn).all()
+    assert len(check_ins)
+    check_ins[0].completed = True
+    check_ins[0].end_date = (dt.today()-timedelta(days=1)).strftime(DATE_FORMAT)
+    check_ins[1].end_date = (dt.today()-timedelta(days=1)).strftime(DATE_FORMAT)
+    db_session.commit()
+
+    # Retrieve the list of all check_ins for all users, each user should have 2 check ins
+    resp, code = request(client, "GET", "/checkins")
+    assert code == 200
+    assert resp != None
+    assert len(resp['completed']) == 1
+    assert len(resp['uncompleted']) == 1
+
 def test_get_checkin(client, db_session):
    # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
