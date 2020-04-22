@@ -97,7 +97,7 @@ class ClientTemplate(db.Model):
     # one to many relationship with Client_sessions
     sessions = db.relationship('ClientSession', cascade="all, delete-orphan", lazy=True, order_by="ClientSession.order")
     # one to many relationship with Check_ins table
-    check_ins = db.relationship('CheckIn', cascade="all, delete-orphan", lazy=True)
+    check_in = db.relationship('CheckIn', lazy=True, uselist=False, single_parent=True, primaryjoin="CheckIn.client_template_id==ClientTemplate.id")
 
 # This partial user schema is used in retrieving templates
 class PartialUserSchema(ma.Schema):

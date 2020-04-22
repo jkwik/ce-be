@@ -11,6 +11,9 @@ from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExe
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from datetime import datetime as dt
+from datetime import date, timedelta
+
+DATE_FORMAT = '%Y-%m-%d'
 
 #  ----------------- SETUP -----------------
 
@@ -342,13 +345,15 @@ def test_post_client_template(client, db_session):
 
     # Create the client template, this function returns the coach_template used to assign to a client
     # This also creates checkins so we can check that functionality
-    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
     check_ins = db_session.query(CheckIn).all()
     assert code == 200
     assert resp != None
     assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
     assert check_ins != None
-    assert len(check_ins) == 2
+    assert len(check_ins) == 1
+    assert check_ins[0].start_date == date.today().strftime(DATE_FORMAT)
+    assert check_ins[0].end_date == (date.today() + timedelta(days=len(resp['sessions']))).strftime(DATE_FORMAT)
 
     # Create a second client template to test slugification
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=3)
@@ -722,7 +727,7 @@ def generate_coach_template_model(db_session, id):
 
 # This method creates a client template by first creating a coach_template, then assigning it to a client.
 # It returns (response, code, coach_template)
-def create_client_template(client, db_session, client_id, starting_exercise_id=1, create_checkins=False):
+def create_client_template(client, db_session, client_id, starting_exercise_id=1):
     # Create a coach template to assign to a client
     coach_template = generate_coach_template_model(db_session, starting_exercise_id)
     db_session.add(coach_template)
@@ -746,9 +751,6 @@ def create_client_template(client, db_session, client_id, starting_exercise_id=1
                 'weight': 315
             })
         data['sessions'].append(session)
-
-    if create_checkins:
-        data['check_ins'] = ['2020-10-07', '2020-10-14']
 
     resp, code = request(client, "POST", '/client/template', data=data)
     return resp, code, coach_template
@@ -1055,35 +1057,38 @@ def test_get_checkin(client, db_session):
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
     # Create the client template, this function returns the coach_template used to assign to a client
-    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], create_checkins=True)
-
-    # Update a particular client session, we will update the first client session
-    data = {
-        'id': resp['sessions'][0]['id'],
-        'name': 'Client session name change 2',
-        'completed': True,
-        'completed_date': '2020-10-08'
-    }
-
-    update_resp, code = request(client, "PUT", '/client/session', data=data)
-    assert code == 200
-    assert update_resp != None
-    assert update_resp['name'] == 'Client session name change 2'
-    assert update_resp['completed_date'] == data['completed_date']
-
-    # check that the template reflects the session changes
-    url = '/client/template?client_template_id={}'.format(resp['id'])
-    get_resp, code = request(client, "GET", url)
-    assert code == 200
-    assert resp != None
-    assert get_resp['id'] == resp['id']
-    assert get_resp['sessions'][0]['completed_date'] == data['completed_date']
-    
-    # This creates checkins so we can check that functionality
-    check_in = db_session.query(CheckIn).first()  
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
     assert code == 200
     assert resp != None
     assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+    # Update a particular client session, we will update the first client session
+    # make completed = True and add the completed_date
+    session = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
+    try:         
+        session['name'] = 'Client session name changed'
+        session['completed'] = True
+        session['completed_date'] = '2020-10-08'
+        db.session.commit()
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        raise
+
+    assert session != None
+    assert session['name'] == 'Client session name changed'
+    assert session['completed_date'] == '2020-10-08'
+
+    # check that the template reflects the session changes
+    template = ClientTemplate.query.filter_by(id=resp['id'])
+    assert template != None
+    assert template['id'] == resp['id']
+    assert template['sessions'][0]['completed_date'] == '2020-10-08'
+    
+    # retrieve a checkin
+    check_in = db_session.query(CheckIn).first()  
     assert check_in != None
 
     # format date string
@@ -1093,11 +1098,51 @@ def test_get_checkin(client, db_session):
     # Retrieve sessions from a particular checkin corresponding to the created client_template_id
     url = '/checkin?checkin_id={}'.format(check_in.id)
     checkin_resp, code = request(client, 'GET', url)
-    # pdb.set_trace()
     session_completed_date = dt.strptime(str(checkin_resp['sessions'][0]['completed_date']), '%Y-%m-%d')
-    checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d')
-    
+    checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d') 
     assert code == 200
     assert checkin_resp != None
     assert checkin_resp['sessions'][0]['completed'] == True
     assert session_completed_date > checkin_start_date
+
+def test_get_client_checkins(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+    
+    # create a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+    # Update a particular client session, we will update the first and second client sessions
+    session1 = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
+    session2 = ClientSession.query.filter_by(id=resp['sessions'][1]['id']).first()
+    # make completed = True and add the completed_date   
+    session1.completed = True
+    session1.completed_date = '2020-10-08'
+    session2.completed = True
+    session2.completed_date = '2020-10-09'
+    db.session.commit()
+    assert session1 != None and session2 != None
+    assert session1.completed_date == '2020-10-08' and session2.completed_date == '2020-10-09'
+
+    # Retrieve sessions from a particular checkin corresponding to the created client_template_id
+    url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
+    checkins, code = request(client, 'GET', url)    
+    assert code == 200
+    assert checkins != None
+    # check ordering, later dates should appear before earlier dates
+    assert len(checkins) == 1
+    assert checkins['check_ins'][0]['start_date'] == date.today().strftime(DATE_FORMAT)

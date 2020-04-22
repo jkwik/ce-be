@@ -1,6 +1,6 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
-from backend.models.user import User, Role, user_schemas
+from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
@@ -119,7 +119,7 @@ def createClientTemplate(token_claims):
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
         name=coach_template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
-        completed=False, active=True, sessions=[], check_ins=[]
+        completed=False, active=True, sessions=[]
     )
     # Set all other client templates if there are any to active false
     try:
@@ -159,34 +159,14 @@ def createClientTemplate(token_claims):
             )
         client_template.sessions.append(client_session)
 
-    # For each check_in date in the body, create a new check_in object for the template
-    if 'check_ins' in body:
-        for i, check_in_start_date in enumerate(body['check_ins']):
-            client_check_in = CheckIn(completed=False)
-            parsed_start_date = None
-
-            # Sanity check the format of the start_date by parsing it
-            try:
-                parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
-            except Exception as e:
-                return {
-                    "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
-                }, 400
-            client_check_in.start_date = parsed_start_date.strftime(DATE_FORMAT)
-
-            # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
-            if i != len(body['check_ins']) - 1:
-                try:
-                    parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
-                    client_check_in.end_date = (parsed_next_start_date - timedelta(days=1)).strftime(DATE_FORMAT)
-                except Exception as e:
-                    return {
-                        "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
-                    }
-            else:
-                client_check_in.end_date = None
-            
-            client_template.check_ins.append(client_check_in)
+    # Create the check-in date by adding number of total sessions (as days) to todays date
+    check_in_start_date = date.today()
+    check_in_end_date = check_in_start_date + timedelta(days=len(client_template.sessions))
+    client_check_in = CheckIn(
+        completed=False, start_date=check_in_start_date.strftime(DATE_FORMAT),
+        end_date=check_in_end_date.strftime(DATE_FORMAT)
+    )
+    client_template.check_in = client_check_in
 
     try:
         # create new template in CoachTemplate table
@@ -557,4 +537,41 @@ def getCheckins(token_claims):
 
     return {
         "users": users_result
+    }
+        
+@app.route("/client/checkins", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getClientCheckins(token_claims):
+    client_id = request.args.get('client_id')
+    if client_id == None:
+        return {
+            "error": "No query parameter client_id found in request"
+        }, 400
+    # get the client_templates that this client has been assigned to (past or present), given the client_id
+    client_templates = ClientTemplate.query.filter_by(user_id=client_id).all()
+
+    if client_templates == None:
+        return {
+        "error": "No client_templates found with supplied client_id"
+        }, 404
+
+    checkins_arr = []
+    # for each client_template, get the corresponding checkins
+    for template in client_templates:
+        # get checkins with the given client_template_id
+        checkins_found = CheckIn.query.filter_by(client_template_id=template.id).all()
+        if checkins_found == None:
+            return {
+            "error": "No checkins found with the given client_id"
+        }, 404
+        # for each checkin found through client_templates, add them to a checkins list
+        for checkin in checkins_found:
+            checkins_arr.append(checkin)
+
+    # sort the checkins by start_date
+    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date, reverse=True)
+    checkin_results = check_in_schemas.dump(checkins_arr)
+
+    return {
+        "check_ins": checkin_results
     }
