@@ -555,10 +555,12 @@ def test_put_client_session(client, db_session):
     assert client_template != None
     assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
 
-    # Update a particular client session, we will update the first client session
+    # Update a particular client session, we will update the first client session. Set completed to true so we can test if the completed_date is being
+    # set correctly
     data = {
         'id': client_template['sessions'][0]['id'],
         'name': 'Client session name change',
+        'completed': True,
         'exercises': [
             {
                 "name": "Deadlifts",
@@ -576,6 +578,8 @@ def test_put_client_session(client, db_session):
     assert resp != None
     assert len(resp['exercises']) == 1
     assert resp['name'] == 'Client session name change'
+    assert resp['completed'] == True
+    assert resp['completed_date'] == (date.today() + timedelta(days=resp['order'])).strftime(DATE_FORMAT)
 
 def test_get_active_client_template(client, db_session):
     # Create and sign into the client
