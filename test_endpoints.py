@@ -1113,27 +1113,9 @@ def test_get_checkin(client, db_session):
     # Update a particular client session, we will update the first client session
     # make completed = True and add the completed_date
     session = ClientSession.query.filter_by(id=resp['sessions'][0]['id']).first()
-    try:         
-        session['name'] = 'Client session name changed'
-        session['completed'] = True
-        session['completed_date'] = '2020-10-08'
-        db.session.commit()
-    except Exception as e:
-        print(e)
-        return {
-            "error": "Internal Server Error"
-        }, 500
-        raise
-
-    assert session != None
-    assert session['name'] == 'Client session name changed'
-    assert session['completed_date'] == '2020-10-08'
-
-    # check that the template reflects the session changes
-    template = ClientTemplate.query.filter_by(id=resp['id'])
-    assert template != None
-    assert template['id'] == resp['id']
-    assert template['sessions'][0]['completed_date'] == '2020-10-08'
+    session.completed = True
+    session.completed_date = '2020-10-08'
+    db.session.commit()
     
     # retrieve a checkin
     check_in = db_session.query(CheckIn).first()  
@@ -1177,9 +1159,72 @@ def test_get_client_checkins(client, db_session):
     # Retrieve check_ins with given client_id
     url = '/client/checkins?client_id={}'.format(client_user['user']['id'])
     checkins, code = request(client, 'GET', url)
-    pdb.set_trace()
     assert code == 200
     assert checkins != None
-    # check ordering, later dates should appear before earlier dates
+    # 2 checkins should have been made
     assert len(checkins) == 2
-    assert checkins['incomplete'][0]['start_date'] == date.today().strftime(DATE_FORMAT)
+    # because the checkin.end_date will be a day from now, both arrays should be empty
+    # we do not want to retrieve checkins that have not reached their end date
+    assert len(checkins['completed']) == 0 and len(checkins['uncompleted']) == 0
+
+def test_submit_checkin(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+    
+    # create a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+    # retrieve a checkin
+    check_in = db_session.query(CheckIn).first()  
+    assert check_in != None
+
+    data = {
+        "check_in": {
+            "client_comment": None,
+            "client_template_id": resp['id'],
+            "coach_comment": "Template completed",
+            "completed": False,
+            "id": check_in.id
+        },
+        "sessions": [
+            {
+                'id': resp['sessions'][0]['id'],
+                'name': 'Client session name change',
+                'completed': True,
+                'exercises': [
+                    {
+                        "name": "Deadlifts",
+                        "category": "Lower Back",
+                        "sets": 1,
+                        "reps": 1,
+                        "weight": 100,
+                        "order": 1
+                    }
+                ]
+            }
+        ]
+        
+    }
+
+    resp, code = request(client, "PUT", '/submitCheckin', data=data)
+    assert code == 200
+    assert resp != None
+    assert len(resp['sessions'][0]['exercises']) == 1
+    assert resp['sessions'][0]['name'] == 'Client session name change'
+    assert resp['sessions'][0]['completed'] == True
+    assert resp['sessions'][0]['completed_date'] == (date.today() + timedelta(days=resp['sessions'][0]['order'])).strftime(DATE_FORMAT)
+    assert resp['check_in']['coach_comment'] == "Template completed"

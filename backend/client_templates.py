@@ -3,7 +3,7 @@ from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
-from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
+from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent, setNonNullCheckinFields, setUpdateSessionFields
 from backend.helpers.general import makeTemplateSlugUnique
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
@@ -147,7 +147,7 @@ def createClientTemplate(token_claims):
             exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
             if exercise == None:
                 return {
-                    "error": "No exercise found with id: " + str(session['id'])
+                    "error": "No exercise found with id: " + str(coach_exercise['id'])
                 }
 
             exercise_dump = coach_exercise_schema.dump(exercise)
@@ -431,34 +431,8 @@ def updateClientSession(token_claims):
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
 
-    # If they are completing a session (completed=True), then set the completed date to template start_date + session order (in days)
-    if 'completed' in body:
-        if body['completed'] == True:
-            client_session.completed_date = (dt.strptime(str(client_template.start_date), DATE_FORMAT) + timedelta(days=client_session.order)).strftime(DATE_FORMAT)
-    
-    # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
-    if 'exercises' in body:
-        client_exercises = []
-        for client_exercise in body['exercises']:
-            client_exercises.append(
-                ClientExercise(
-                    name=client_exercise['name'], category=client_exercise['category'], sets=client_exercise['sets'],
-                    reps=client_exercise['reps'], weight=client_exercise['weight'], order=client_exercise['order']
-                )
-            )
-        client_session.exercises = client_exercises
-    
-    # Update the training_entries by replacing the ones in client_session with the ones passed in the request
-    if 'training_entries' in body:
-        client_training_entries = []
-        for client_training_entry in body['training_entries']:
-            client_training_entries.append(
-                TrainingEntry(
-                    name=client_training_entry['name'], category=client_training_entry['category'], sets=client_training_entry['sets'],
-                    reps=client_training_entry['reps'], weight=client_training_entry['weight'], order=client_training_entry['order']
-                )
-            )
-        client_session.training_entries = client_training_entries
+    # update the session exercises and/or training_entries
+    client_session = setUpdateSessionFields(client_template, client_session, body)
 
     try:
         db.session.commit()
@@ -624,91 +598,55 @@ def getClientCheckins(token_claims):
     incomplete_checkin_results = check_in_schemas.dump(incomplete_checkins)
 
     return {
-        "complete": complete_checkin_results,
-        "incomplete": incomplete_checkin_results
+        "completed": complete_checkin_results,
+        "uncompleted": incomplete_checkin_results
     }
 
-# @app.route("/submitCheckin", methods=["PUT"])
-# @http_guard(renew=True, nullable=False)
-# def submitCheckin(token_claims):
-#     if token_claims['role'] != Role.COACH.name or token_claims['role'] != Role.CLIENT.name:
-#         return {
-#             "error": "Logged in user doesn't have a role of COACH or CLIENT"
-#         }, 401
+@app.route("/submitCheckin", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def submitCheckin(token_claims):
+    body = request.get_json(force=True)
+
+    if 'sessions' not in body and 'check_in' not in body:
+        return {
+            "error": "Must have either 'sessions', 'check_in' or both in request"
+        }, 404
+
+    if 'sessions' in body:
+        client_sessions = []
+        # Iterate through sessions and update client_sessions and client_exercises
+        for session in body['sessions']:
+            client_session = ClientSession.query.filter_by(id=session['id']).first()
+            if client_session == None:
+                return {
+                    "error": "No client_session found with session id: " + str(session['id'])
+                }, 404
+
+            # Update the session metadata that the request has asked for, handle updating client_exercises separately
+            setNonNullClientSessionFields(client_session, session)
+            # get the client_template this session belongs to
+            client_template = ClientTemplate.query.filter_by(id=client_session.client_template_id).first()
+            # update the exercises and training_entries
+            client_session = setUpdateSessionFields(client_template, client_session, session)
+            client_sessions.append(client_session)
+            try:
+                db.session.commit()
+                db.session.refresh(client_session)
+            except Exception as e:
+                print(e)
+                return {
+                    "error": "Internal Server Error"
+                }, 500
+                raise
+        client_session_results = client_session_schemas.dump(client_sessions)
     
-#     body = request.get_json(force=True)
+    # update the check_in fields as necessary
+    if 'check_in' in body:
+        checkin = CheckIn.query.filter_by(id=body['check_in']['id'])
+        setNonNullCheckinFields(checkin, body['check_in'])
+        check_in_result = check_in_schema.dump(checkin)
 
-#     if 'sesssions' in body:
-#         # Iterate through sessions and create client_sessions, and client_exercises from them
-#         for session in sessions:
-#             coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
-#             if coach_session == None:
-#                 return {
-#                     "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
-#                 }, 404
-
-#             # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
-#             client_session = ClientSession(
-#                 name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
-#             )
-#             for coach_exercise in session['coach_exercises']:
-#                 exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
-#                 if exercise == None:
-#                     return {
-#                         "error": "No exercise found with id: " + str(session['id'])
-#                     }
-
-#                 exercise_dump = coach_exercise_schema.dump(exercise)
-#                 client_session.exercises.append(
-#                     ClientExercise(
-#                         sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
-#                         category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
-#                     )
-#                 )
-#             client_template.sessions.append(client_session)
-    
-#     # For each check_in date in the body, create a new check_in object for the template
-#     if 'check_ins' in body:
-#         for i, check_in_start_date in enumerate(body['check_ins']):
-#             client_check_in = CheckIn(completed=False)
-#             parsed_start_date = None
-
-#             # Sanity check the format of the start_date by parsing it
-#             try:
-#                 parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
-#             except Exception as e:
-#                 return {
-#                     "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
-#                 }, 400
-#             client_check_in.start_date = str(parsed_start_date)
-
-#             # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
-#             if i != len(body['check_ins']) - 1:
-#                 try:
-#                     parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
-#                     client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
-#                 except Exception as e:
-#                     return {
-#                         "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
-#                     }
-#             else:
-#                 client_check_in.end_date = None
-            
-#             client_template.check_ins.append(client_check_in)
-
-#     try:
-#         # create new template in CoachTemplate table
-#         db.session.add(client_template)
-#         db.session.commit()
-#     except Exception as e:
-#         print(e)
-#         return {
-#             "error": "Internal Server Error"
-#         }, 500
-#         raise
-
-#     db.session.refresh(client_template)
-
-#     result = client_template_schema.dump(client_template)
-
-#     return result
+    return {
+        "check_in": check_in_result,
+        "sessions": client_session_results
+    }
