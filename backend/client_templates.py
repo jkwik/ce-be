@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
 from backend.helpers.general import makeTemplateSlugUnique
@@ -430,6 +430,11 @@ def updateClientSession(token_claims):
 
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
+
+    # If they are completing a session (completed=True), then set the completed date to template start_date + session order (in days)
+    if 'completed' in body:
+        if body['completed'] == True:
+            client_session.completed_date = (dt.strptime(str(client_template.start_date), DATE_FORMAT) + timedelta(days=client_session.order)).strftime(DATE_FORMAT)
     
     # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
     if 'exercises' in body:
@@ -466,6 +471,37 @@ def updateClientSession(token_claims):
         raise
 
     return client_session_schema.dump(client_session)
+
+@app.route("/client/trainingLog", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getTrainingLog(token_claims):
+    client_id = request.args.get('client_id')
+
+    if client_id == None:
+        return {
+            "error": "No query parameter client_id found in query parameter"
+        }, 400
+
+    # Grab all templates belonging to the client
+    client_templates = ClientTemplate.query.filter(ClientTemplate.user_id == client_id).all()
+
+    sessions = []
+
+    for client_template in client_templates:
+        # Grab all completed sessions belonging to the template
+        client_sessions = ClientSession.query.filter(
+            ClientSession.client_template_id == client_template.id, ClientSession.completed == True
+        ).order_by(ClientSession.completed_date.desc()).all()
+
+        sessions = sessions + client_sessions
+
+    sessions = sorted(sessions, key=lambda k: k.completed_date, reverse=True)
+
+    sessions_result = training_log_schemas.dump(sessions)
+
+    return {
+        "sessions": sessions_result
+    }
 
 @app.route("/checkin", methods=["GET"])
 @http_guard(renew=True, nullable=False)
@@ -513,6 +549,34 @@ def getCheckin(token_claims):
         "sessions": session_result
     }
 
+@app.route("/checkins", methods=["GET"])
+@http_guard(renew=True, nullable=False)
+def getCheckins(token_claims):
+    if token_claims['role'] != Role.COACH.name:
+        return {
+            "error": "User must be of type COACH to call endpoint"
+        }, 401
+
+    try:
+        # Grab all completed check_ins who's end_date is before todays date. Order this descending so the most recent one is viewed
+        completed_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == True).order_by(CheckIn.end_date.desc()).all()
+
+        # Grab all noncompleted check_ins whos end_date is before todays date. Order this ascending so the oldest one is viewed
+        noncompleted_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == False).order_by(CheckIn.end_date.desc()).all()
+
+        completed_check_ins_result = check_in_schemas.dump(completed_check_ins)
+        noncompleted_check_ins_result = check_in_schemas.dump(noncompleted_check_ins)
+
+        return {
+            "completed": completed_check_ins_result,
+            "uncompleted": noncompleted_check_ins_result
+        }
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
+        
 @app.route("/client/checkins", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientCheckins(token_claims):

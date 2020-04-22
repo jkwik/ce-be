@@ -75,6 +75,14 @@ class ClientSessionSchema(ma.Schema):
 client_session_schema = ClientSessionSchema()
 client_session_schemas = ClientSessionSchema(many=True)
 
+class TrainingLogSchema(ma.Schema):
+    training_entries = ma.Nested(TrainingEntrySchema, many=True)
+    class Meta:
+        fields = ('id', 'name', 'order', 'slug', 'completed', 'completed_date', 'training_entries')
+
+training_log_schema = TrainingLogSchema()
+training_log_schemas = TrainingLogSchema(many=True)
+
 # This schema is used to for the templates to pull partial information about sessions
 class PartialClientSessionSchema(ma.Schema):
     class Meta:

@@ -6,7 +6,7 @@ import pdb
 import unittest
 from backend import app, db, bcrypt
 from backend.models.user import User, UserSchema, user_schema, Role
-from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn
+from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
@@ -555,10 +555,12 @@ def test_put_client_session(client, db_session):
     assert client_template != None
     assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
 
-    # Update a particular client session, we will update the first client session
+    # Update a particular client session, we will update the first client session. Set completed to true so we can test if the completed_date is being
+    # set correctly
     data = {
         'id': client_template['sessions'][0]['id'],
         'name': 'Client session name change',
+        'completed': True,
         'exercises': [
             {
                 "name": "Deadlifts",
@@ -576,6 +578,8 @@ def test_put_client_session(client, db_session):
     assert resp != None
     assert len(resp['exercises']) == 1
     assert resp['name'] == 'Client session name change'
+    assert resp['completed'] == True
+    assert resp['completed_date'] == (date.today() + timedelta(days=resp['order'])).strftime(DATE_FORMAT)
 
 def test_get_active_client_template(client, db_session):
     # Create and sign into the client
@@ -999,9 +1003,93 @@ def test_put_coach_session(client, db_session):
     assert len(resp['coach_exercises']) == 1
     assert resp['name'] == 'Coach session name change'
 
+# TRAINING LOG
+def test_get_client_training_logs(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+    # create a client
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the client template, this function returns the coach_template used to assign to a client
+    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
+    assert code == 200
+    assert resp != None
+    assert resp['name'] == coach_template.name and resp['user_id'] == client_user['user']['id']
+
+    # Set one of the sessions as true and add a training entry
+    client_sessions = db_session.query(ClientSession).all()
+    assert client_sessions != None
+    assert len(client_sessions) == 2
+    client_sessions[0].completed = True
+    client_sessions[0].training_entries = [
+        TrainingEntry(
+            name='Test Exercise', category='Test Category', reps=10, sets=10, weight=150, order=1
+        )
+    ]
+    db_session.commit()
+
+    # Retrieve client training log and check that 1 session is included with 1 training entry
+    resp, code = request(client, "GET", "/client/trainingLog?client_id={}".format(client_user['user']['id']))
+    assert code == 200
+    assert len(resp['sessions']) == 1
+    assert len(resp['sessions'][0]['training_entries']) == 1
 
 # CHECKINS
+def test_get_checkins(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Create 2 clients so we can create check_ins for them
+    client_user_1 = sign_up_user_for_testing(client, test_client)
+    assert client_user_1['user'] != None
+    assert client_user_1['user']['role'] == 'CLIENT'
+    client_user_2 = sign_up_user_for_testing(client, {
+        'first_name': 'test',
+        'last_name': 'client',
+        'email': 'test_2@client.com',
+        'password': 'fakepassword',
+        'role': 'CLIENT'
+    })
+    assert client_user_2['user'] != None
+    assert client_user_2['user']['role'] == 'CLIENT'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a client_template for each client, 1 check in should be created per template
+    resp, code, _ = create_client_template(client, db_session, client_user_1['user']['id'])
+    assert code == 200
+    assert resp != None
+    resp, code, _ = create_client_template(client, db_session, client_user_2['user']['id'], starting_exercise_id=3)
+    assert code == 200
+    assert resp != None
+
+    # Complete one of the checkins and change the end dates to be 1 day before today so they appear in the results
+    check_ins = db_session.query(CheckIn).all()
+    assert len(check_ins)
+    check_ins[0].completed = True
+    check_ins[0].end_date = (dt.today()-timedelta(days=1)).strftime(DATE_FORMAT)
+    check_ins[1].end_date = (dt.today()-timedelta(days=1)).strftime(DATE_FORMAT)
+    db_session.commit()
+
+    # Retrieve the list of all check_ins for all users, each user should have 2 check ins
+    resp, code = request(client, "GET", "/checkins")
+    assert code == 200
+    assert resp != None
+    assert len(resp['completed']) == 1
+    assert len(resp['uncompleted']) == 1
+
 def test_get_checkin(client, db_session):
    # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
