@@ -564,87 +564,87 @@ def getClientCheckins(token_claims):
         "incomplete": incomplete_checkin_results
     }
 
-@app.route("/submitCheckin", methods=["PUT"])
-@http_guard(renew=True, nullable=False)
-def submitCheckin(token_claims):
-    if token_claims['role'] != Role.COACH.name or token_claims['role'] != Role.CLIENT.name:
-        return {
-            "error": "Logged in user doesn't have a role of COACH or CLIENT"
-        }, 401
+# @app.route("/submitCheckin", methods=["PUT"])
+# @http_guard(renew=True, nullable=False)
+# def submitCheckin(token_claims):
+#     if token_claims['role'] != Role.COACH.name or token_claims['role'] != Role.CLIENT.name:
+#         return {
+#             "error": "Logged in user doesn't have a role of COACH or CLIENT"
+#         }, 401
     
-    body = request.get_json(force=True)
+#     body = request.get_json(force=True)
 
-    if 'sesssions' in body:
-        # Iterate through sessions and create client_sessions, and client_exercises from them
-        for session in sessions:
-            coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
-            if coach_session == None:
-                return {
-                    "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
-                }, 404
+#     if 'sesssions' in body:
+#         # Iterate through sessions and create client_sessions, and client_exercises from them
+#         for session in sessions:
+#             coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
+#             if coach_session == None:
+#                 return {
+#                     "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
+#                 }, 404
 
-            # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
-            client_session = ClientSession(
-                name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
-            )
-            for coach_exercise in session['coach_exercises']:
-                exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
-                if exercise == None:
-                    return {
-                        "error": "No exercise found with id: " + str(session['id'])
-                    }
+#             # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
+#             client_session = ClientSession(
+#                 name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
+#             )
+#             for coach_exercise in session['coach_exercises']:
+#                 exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
+#                 if exercise == None:
+#                     return {
+#                         "error": "No exercise found with id: " + str(session['id'])
+#                     }
 
-                exercise_dump = coach_exercise_schema.dump(exercise)
-                client_session.exercises.append(
-                    ClientExercise(
-                        sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
-                        category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
-                    )
-                )
-            client_template.sessions.append(client_session)
+#                 exercise_dump = coach_exercise_schema.dump(exercise)
+#                 client_session.exercises.append(
+#                     ClientExercise(
+#                         sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
+#                         category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
+#                     )
+#                 )
+#             client_template.sessions.append(client_session)
     
-    # For each check_in date in the body, create a new check_in object for the template
-    if 'check_ins' in body:
-        for i, check_in_start_date in enumerate(body['check_ins']):
-            client_check_in = CheckIn(completed=False)
-            parsed_start_date = None
+#     # For each check_in date in the body, create a new check_in object for the template
+#     if 'check_ins' in body:
+#         for i, check_in_start_date in enumerate(body['check_ins']):
+#             client_check_in = CheckIn(completed=False)
+#             parsed_start_date = None
 
-            # Sanity check the format of the start_date by parsing it
-            try:
-                parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
-            except Exception as e:
-                return {
-                    "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
-                }, 400
-            client_check_in.start_date = str(parsed_start_date)
+#             # Sanity check the format of the start_date by parsing it
+#             try:
+#                 parsed_start_date = dt.strptime(check_in_start_date, DATE_FORMAT)
+#             except Exception as e:
+#                 return {
+#                     "Expected check_in dates to be of the format YYYY-MM-DD, not: " + check_in_start_date
+#                 }, 400
+#             client_check_in.start_date = str(parsed_start_date)
 
-            # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
-            if i != len(body['check_ins']) - 1:
-                try:
-                    parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
-                    client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
-                except Exception as e:
-                    return {
-                        "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
-                    }
-            else:
-                client_check_in.end_date = None
+#             # The end date for each checkin will be the day before the next check_in starts if it isn't the last one
+#             if i != len(body['check_ins']) - 1:
+#                 try:
+#                     parsed_next_start_date = dt.strptime(body['check_ins'][i+1], DATE_FORMAT)
+#                     client_check_in.end_date = parsed_next_start_date - timedelta(days=1)
+#                 except Exception as e:
+#                     return {
+#                         "Expected check_in dates to be of the format YYYY-MM-DD, not: " + body['check_ins'][i+1]
+#                     }
+#             else:
+#                 client_check_in.end_date = None
             
-            client_template.check_ins.append(client_check_in)
+#             client_template.check_ins.append(client_check_in)
 
-    try:
-        # create new template in CoachTemplate table
-        db.session.add(client_template)
-        db.session.commit()
-    except Exception as e:
-        print(e)
-        return {
-            "error": "Internal Server Error"
-        }, 500
-        raise
+#     try:
+#         # create new template in CoachTemplate table
+#         db.session.add(client_template)
+#         db.session.commit()
+#     except Exception as e:
+#         print(e)
+#         return {
+#             "error": "Internal Server Error"
+#         }, 500
+#         raise
 
-    db.session.refresh(client_template)
+#     db.session.refresh(client_template)
 
-    result = client_template_schema.dump(client_template)
+#     result = client_template_schema.dump(client_template)
 
-    return result
+#     return result

@@ -1093,5 +1093,5 @@ def test_get_client_checkins(client, db_session):
     assert code == 200
     assert checkins != None
     # check ordering, later dates should appear before earlier dates
-    assert len(checkins) == 1
-    assert checkins['check_ins'][0]['start_date'] == date.today().strftime(DATE_FORMAT)
+    assert len(checkins) == 2
+    assert checkins['incomplete'][0]['start_date'] == date.today().strftime(DATE_FORMAT)
