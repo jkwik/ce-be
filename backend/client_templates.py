@@ -521,23 +521,25 @@ def getCheckins(token_claims):
             "error": "User must be of type COACH to call endpoint"
         }, 401
 
-    # Grab all CLIENTS
-    users = db.session.query(User.id, User.first_name, User.last_name).filter_by(role=Role.CLIENT.name).all()
-    users_result = user_schemas.dump(users)
+    try:
+        # Grab all completed check_ins who's end_date is before todays date. Order this descending so the most recent one is viewed
+        completed_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == True).order_by(CheckIn.end_date.desc()).all()
 
-    # For each user, retrieve all their client_templates and all the checkins associated with them.
-    for user in users_result:
-        user['check_ins'] = []
-        template_ids = db.session.query(ClientTemplate.id).filter_by(user_id = user['id']).order_by(ClientTemplate.start_date.desc()).all()
-        
-        for template_id in template_ids:
-            check_ins = CheckIn.query.filter_by(client_template_id = template_id[0]).order_by(CheckIn.start_date.desc()).all()
-            check_ins_result = check_in_schemas.dump(check_ins)
-            user['check_ins'] += check_ins_result
+        # Grab all noncompleted check_ins whos end_date is before todays date. Order this ascending so the oldest one is viewed
+        noncompleted_check_ins = CheckIn.query.filter(CheckIn.end_date <= date.today().strftime(DATE_FORMAT), CheckIn.completed == False).order_by(CheckIn.end_date.desc()).all()
 
-    return {
-        "users": users_result
-    }
+        completed_check_ins_result = check_in_schemas.dump(completed_check_ins)
+        noncompleted_check_ins_result = check_in_schemas.dump(noncompleted_check_ins)
+
+        return {
+            "completed": completed_check_ins_result,
+            "uncompleted": noncompleted_check_ins_result
+        }
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error"
+        }, 500
         
 @app.route("/client/checkins", methods=["GET"])
 @http_guard(renew=True, nullable=False)
