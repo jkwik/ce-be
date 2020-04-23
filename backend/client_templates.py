@@ -554,11 +554,6 @@ def getCheckins(token_claims):
 @app.route("/client/checkins", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getClientCheckins(token_claims):
-    if token_claims['role'] != Role.COACH.name:
-        return {
-            "error": "Logged in user doesn't have a role of COACH"
-    }, 401
-
     client_id = request.args.get('client_id')
     if client_id == None:
         return {
@@ -644,6 +639,15 @@ def submitCheckin(token_claims):
     if 'check_in' in body:
         checkin = CheckIn.query.filter_by(id=body['check_in']['id'])
         setNonNullCheckinFields(checkin, body['check_in'])
+        try:
+            db.session.commit()
+            db.session.refresh(checkin)
+        except Exception as e:
+            print(e)
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
         check_in_result = check_in_schema.dump(checkin)
 
     return {
