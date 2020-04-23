@@ -1,7 +1,7 @@
 from backend import db, app
 from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
-from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
+from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_exercise_schema, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent, setNonNullCheckinFields, setUpdateSessionFields
 from backend.helpers.general import makeTemplateSlugUnique
@@ -87,11 +87,11 @@ def createClientTemplate(token_claims):
     body = request.get_json(force=True)
 
     # Sanity check body data
-    if 'sessions' not in body or 'coach_template_id' not in body or 'client_id' not in body:
+    if 'sessions' not in body or 'template_id' not in body or 'client_id' not in body or 'role' not in body:
         return {
-            "error": "Need to specify a valid coach_template_id (int), client_id (int) and sessions (array)"
+            "error": "Need to specify a valid template_id (int), client_id (int), sessions (array), and role (enum)"
         }, 400
-    coach_template_id = body['coach_template_id']
+    template_id = body['template_id']
     client_id = body['client_id']
     sessions = body['sessions']
     if len(sessions) <= 0:
@@ -99,12 +99,26 @@ def createClientTemplate(token_claims):
             "error": "Length of sessions supplied is 0"
         }, 400
 
-    # Grab the coach template
-    coach_template = CoachTemplate.query.filter_by(id=coach_template_id).first()
-    if coach_template == None:
+    # Grab a coach or client template depending on the role specified
+    template = None
+
+    if body['role'] == Role.COACH.name:
+        template = CoachTemplate.query.filter_by(id=template_id).first()
+        if template == None:
+            return {
+                "error": "No coach template found with coach_template_id: " + str(template_id)
+            }, 404
+    elif body['role'] == Role.CLIENT.name:
+        template = ClientTemplate.query.filter_by(id=template_id).first()
+        if template == None:
+            return {
+                "error": "No client template found with client_template_id: " + str(template_id)
+            }
+    else:
         return {
-            "error": "No coach template found with coach_template_id: " + str(coach_template_id)
-        }, 404
+            "error": "Parameter role should be either COACH or CLIENT"
+        }, 400
+
     # Grab the user with the client id
     client = User.query.filter_by(id=client_id).first()
     if client == None:
@@ -114,14 +128,14 @@ def createClientTemplate(token_claims):
 
     # Slugify the coach template name and make it unique. Making it unique checks for an existing client template slug and increments
     # the count, adds to end of slug if one exists
-    client_template_slug = makeTemplateSlugUnique(ClientTemplate, slugify(coach_template.name + "-" + client.first_name + "-" + client.last_name))
+    client_template_slug = makeTemplateSlugUnique(ClientTemplate, slugify(template.name + "-" + client.first_name + "-" + client.last_name))
 
     # Initialize client template and fill sessions, exercises and check ins as we go
     client_template = ClientTemplate(
-        name=coach_template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
+        name=template.name, slug=client_template_slug, start_date=str(date.today()), user_id=client_id,
         completed=False, active=True, sessions=[]
     )
-    # Set all other client templates if there are any to active false
+    # Set all other client templates if there are any to active false because we set this one as active
     try:
         db.session.execute('UPDATE "Client_templates" SET active=False where user_id={}'.format(client_id))
         db.session.commit()
@@ -133,27 +147,43 @@ def createClientTemplate(token_claims):
 
     # Iterate through sessions and create client_sessions, and client_exercises from them
     for session in sessions:
-        coach_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=coach_template_id).first()
-        if coach_session == None:
+        template_session = None
+        if body['role'] == Role.COACH.name:
+            template_session = CoachSession.query.filter_by(id=session['id'], coach_template_id=template_id).first()
+        else:
+            template_session = ClientSession.query.filter_by(id=session['id'], client_template_id=template_id).first()
+        
+        if template_session == None:
             return {
-                "error": "No coach_session found with session id: " + str(session['id']) + " and template id: " + str(coach_template_id)
+                "error": "No session found with session id: " + str(session['id']) + " and template id: " + str(template_id)
             }, 404
 
         # Initialize a client session and fill with client_exercises, we re-use the coach session slug as we know it will be unique within the template
         client_session = ClientSession(
-            name=coach_session.name, slug=coach_session.slug, order=coach_session.order, completed=False, exercises=[], training_entries=[]
+            name=template_session.name, slug=template_session.slug, order=template_session.order, completed=False, exercises=[], training_entries=[]
         )
-        for coach_exercise in session['coach_exercises']:
-            exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
-            if exercise == None:
+        for exercise in session['exercises']:
+            template_exercise = None
+
+            if body['role'] == Role.COACH.name:
+                template_exercise = CoachExercise.query.filter_by(id=exercise['id']).first()
+            else:
+                template_exercise = ClientExercise.query.filter_by(id=exercise['id']).first()
+
+            if template_exercise == None:
                 return {
-                    "error": "No exercise found with id: " + str(coach_exercise['id'])
+                    "error": "No exercise found with id: " + str(exercise['id'])
                 }
 
-            exercise_dump = coach_exercise_schema.dump(exercise)
+            exercise_dump = None
+            if body['role'] == Role.COACH.name:
+                exercise_dump = coach_exercise_schema.dump(template_exercise)
+            else:
+                exercise_dump = client_exercise_schema.dump(template_exercise)
+            
             client_session.exercises.append(
                 ClientExercise(
-                    sets=coach_exercise['sets'], reps=coach_exercise['reps'], weight=coach_exercise['weight'],
+                    sets=exercise['sets'], reps=exercise['reps'], weight=exercise['weight'],
                     category=exercise_dump['category'], name=exercise_dump['name'], order=exercise_dump['order']
                 )
             )

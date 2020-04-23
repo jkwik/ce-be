@@ -361,11 +361,34 @@ def test_post_client_template(client, db_session):
     assert resp != None
     assert resp['slug'] == 'test-coach-template-test-client-1'
 
-    # Create a third client template to test incrementing slugification logic
-    resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=5)
+    # Create a third client template using a previous client template to test re-assigning and slugification
+    client_template = ClientTemplate.query.get(resp['id'])
+    assert client_template.id == resp['id']
+    
+    data = {
+        'role': 'CLIENT',
+        'template_id': client_template.id,
+        'client_id': client_user['user']['id'],
+        'sessions': [
+            {
+                'id': client_template.sessions[0].id,
+                'exercises': [
+                    {
+                        'id': client_template.sessions[0].exercises[0].id,
+                        'sets': 4,
+                        'reps': 10,
+                        'weight': 150
+                    }
+                ]
+            }
+        ],
+    }
+    resp, code = request(client, "POST", "/client/template", data=data)
     assert code == 200
     assert resp != None
     assert resp['slug'] == 'test-coach-template-test-client-2'
+    assert resp['sessions'] != None
+    assert len(resp['sessions']) == 1
 
 def test_put_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -731,7 +754,7 @@ def generate_coach_template_model(db_session, id):
 
 # This method creates a client template by first creating a coach_template, then assigning it to a client.
 # It returns (response, code, coach_template)
-def create_client_template(client, db_session, client_id, starting_exercise_id=1):
+def create_client_template(client, db_session, client_id, starting_exercise_id=1, role='COACH'):
     # Create a coach template to assign to a client
     coach_template = generate_coach_template_model(db_session, starting_exercise_id)
     db_session.add(coach_template)
@@ -740,15 +763,16 @@ def create_client_template(client, db_session, client_id, starting_exercise_id=1
     
     # Create a client template using this coach template and assign it to the client
     data = {
-        'coach_template_id': coach_template.id,
+        'template_id': coach_template.id,
         'client_id': client_id,
-        'sessions': []
+        'sessions': [],
+        'role': role
     }
     # Specify the sets, reps and weight of the coach exercises within the sessions
     for coach_session in coach_template.sessions:
-        session = {'id': coach_session.id, 'coach_exercises': []}
+        session = {'id': coach_session.id, 'exercises': []}
         for coach_exercise in coach_session.coach_exercises:
-            session['coach_exercises'].append({
+            session['exercises'].append({
                 'id': coach_exercise.id,
                 'sets': 5,
                 'reps': 5,
