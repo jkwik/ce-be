@@ -3,7 +3,7 @@ from backend.middleware.middleware import http_guard
 from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
-from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent
+from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent, setNonNullCheckinFields, setUpdateSessionFields
 from backend.helpers.general import makeTemplateSlugUnique
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
@@ -147,7 +147,7 @@ def createClientTemplate(token_claims):
             exercise = CoachExercise.query.filter_by(id=coach_exercise['id']).first()
             if exercise == None:
                 return {
-                    "error": "No exercise found with id: " + str(session['id'])
+                    "error": "No exercise found with id: " + str(coach_exercise['id'])
                 }
 
             exercise_dump = coach_exercise_schema.dump(exercise)
@@ -431,34 +431,8 @@ def updateClientSession(token_claims):
     # Update the session metadata that the request has asked for, handle updating client_exercises separately
     setNonNullClientSessionFields(client_session, body)
 
-    # If they are completing a session (completed=True), then set the completed date to template start_date + session order (in days)
-    if 'completed' in body:
-        if body['completed'] == True:
-            client_session.completed_date = (dt.strptime(str(client_template.start_date), DATE_FORMAT) + timedelta(days=client_session.order)).strftime(DATE_FORMAT)
-    
-    # Update the client_exercises by replacing the ones in client_session with the ones passed in the request
-    if 'exercises' in body:
-        client_exercises = []
-        for client_exercise in body['exercises']:
-            client_exercises.append(
-                ClientExercise(
-                    name=client_exercise['name'], category=client_exercise['category'], sets=client_exercise['sets'],
-                    reps=client_exercise['reps'], weight=client_exercise['weight'], order=client_exercise['order']
-                )
-            )
-        client_session.exercises = client_exercises
-    
-    # Update the training_entries by replacing the ones in client_session with the ones passed in the request
-    if 'training_entries' in body:
-        client_training_entries = []
-        for client_training_entry in body['training_entries']:
-            client_training_entries.append(
-                TrainingEntry(
-                    name=client_training_entry['name'], category=client_training_entry['category'], sets=client_training_entry['sets'],
-                    reps=client_training_entry['reps'], weight=client_training_entry['weight'], order=client_training_entry['order']
-                )
-            )
-        client_session.training_entries = client_training_entries
+    # update the session exercises and/or training_entries
+    client_session = setUpdateSessionFields(client_template, client_session, body)
 
     try:
         db.session.commit()
@@ -593,23 +567,90 @@ def getClientCheckins(token_claims):
         "error": "No client_templates found with supplied client_id"
         }, 404
 
-    checkins_arr = []
-    # for each client_template, get the corresponding checkins
+    complete_checkins = []
+    incomplete_checkins = []
+    # for each client_template, get the corresponding checkin
     for template in client_templates:
-        # get checkins with the given client_template_id
-        checkins_found = CheckIn.query.filter_by(client_template_id=template.id).all()
-        if checkins_found == None:
-            return {
-            "error": "No checkins found with the given client_id"
-        }, 404
-        # for each checkin found through client_templates, add them to a checkins list
-        for checkin in checkins_found:
-            checkins_arr.append(checkin)
+        # get checkin with the given client_template_id
+        checkin = CheckIn.query.filter_by(client_template_id=template.id).first()
+        # this means that the client_template was made without a checkin
+        if checkin == None:
+            continue
+        # only include checkins that ended today or before today
+        today = dt.today().strftime('%Y-%m-%d')
+        if checkin.end_date <= today:
+            if checkin.completed == True:
+                complete_checkins.append(checkin)
+            else:
+                incomplete_checkins.append(checkin)
 
-    # sort the checkins by start_date
-    checkins_arr = sorted(checkins_arr, key=lambda k: k.start_date, reverse=True)
-    checkin_results = check_in_schemas.dump(checkins_arr)
+    # sort the completed checkins by start_date
+    complete_checkins = sorted(complete_checkins, key=lambda k: k.start_date, reverse=True)
+    # sort the incompleted checkins by start_date
+    incomplete_checkins = sorted(incomplete_checkins, key=lambda k: k.start_date, reverse=True)
+
+    complete_checkin_results = check_in_schemas.dump(complete_checkins)
+    incomplete_checkin_results = check_in_schemas.dump(incomplete_checkins)
 
     return {
-        "check_ins": checkin_results
+        "completed": complete_checkin_results,
+        "uncompleted": incomplete_checkin_results
+    }
+
+@app.route("/submitCheckin", methods=["PUT"])
+@http_guard(renew=True, nullable=False)
+def submitCheckin(token_claims):
+    body = request.get_json(force=True)
+
+    if 'sessions' not in body and 'check_in' not in body:
+        return {
+            "error": "Must have either 'sessions', 'check_in' or both in request"
+        }, 404
+
+    if 'sessions' in body:
+        client_sessions = []
+        # Iterate through sessions and update client_sessions and client_exercises
+        for session in body['sessions']:
+            client_session = ClientSession.query.filter_by(id=session['id']).first()
+            if client_session == None:
+                return {
+                    "error": "No client_session found with session id: " + str(session['id'])
+                }, 404
+
+            # Update the session metadata that the request has asked for, handle updating client_exercises separately
+            setNonNullClientSessionFields(client_session, session)
+            # get the client_template this session belongs to
+            client_template = ClientTemplate.query.filter_by(id=client_session.client_template_id).first()
+            # update the exercises and training_entries
+            client_session = setUpdateSessionFields(client_template, client_session, session)
+            client_sessions.append(client_session)
+            try:
+                db.session.commit()
+                db.session.refresh(client_session)
+            except Exception as e:
+                print(e)
+                return {
+                    "error": "Internal Server Error"
+                }, 500
+                raise
+        client_session_results = client_session_schemas.dump(client_sessions)
+    
+    # update the check_in fields as necessary
+    if 'check_in' in body:
+        checkin = CheckIn.query.filter_by(id=body['check_in']['id']).first()
+        setNonNullCheckinFields(checkin, body['check_in'])
+        try:
+            db.session.commit()
+            db.session.refresh(checkin)
+        except Exception as e:
+            print(e)
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
+        check_in_result = check_in_schema.dump(checkin)
+
+    return {
+        "check_in": check_in_result,
+        "sessions": client_session_results
     }
