@@ -637,7 +637,7 @@ def submitCheckin(token_claims):
     
     # update the check_in fields as necessary
     if 'check_in' in body:
-        checkin = CheckIn.query.filter_by(id=body['check_in']['id'])
+        checkin = CheckIn.query.filter_by(id=body['check_in']['id']).first()
         setNonNullCheckinFields(checkin, body['check_in'])
         try:
             db.session.commit()
