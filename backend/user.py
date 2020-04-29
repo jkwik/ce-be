@@ -1,6 +1,7 @@
 from backend import app, db, bcrypt, mail
 from backend.models.user import User, user_schema, Role, user_schemas
 from backend.helpers.emails import sendVerificationEmail, sendApprovedEmail
+from backend.helpers.imgur import createAlbum
 from backend.middleware.middleware import http_guard
 from flask import request, session
 from email_validator import validate_email, EmailNotValidError
@@ -73,10 +74,8 @@ def signUp():
 
     #  trim the email to remove unnecessary spaces
     email = body['email'].strip()
-    print(email)
     # convert input email to lowercase
     email = email.lower()
-    print(email)
 
     # Validate that the email is the correct format
     try:
@@ -111,6 +110,23 @@ def signUp():
         approved=False, role=body['role'],
         verified=False
     )
+
+    # Create an album in imgur if we aren't being run by a test
+    create_album = True
+    if 'test' in body:
+        if body['test'] == True:
+            create_album = False
+
+    if create_album:
+        album_id, album_deletehash, code = createAlbum()
+        if code != 200:
+            print("Failed to create imgur album for user with code: " + str(code))
+            return {
+                "error": "Internal Server Error"
+            }, 500
+        
+        user.album_id = album_id
+        user.album_deletehash = album_deletehash
 
     try:
         db.session.add(user)

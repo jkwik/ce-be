@@ -25,6 +25,8 @@ class User(db.Model):
     verification_token = db.Column(db.String, nullable=True)
     verified = db.Column(db.Boolean, nullable=False)
     reset_token = db.Column(db.String, nullable=True)
+    album_id = db.Column(db.String, nullable=True)
+    album_deletehash = db.Column(db.String, nullable=True)
 
     # 1 to many relationship with Client_templates
     client_templates = db.relationship('ClientTemplate', cascade="all, delete-orphan", lazy='dynamic')
