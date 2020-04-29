@@ -568,7 +568,7 @@ def getCheckin(token_claims):
     session_result = client_session_schemas.dump(valid_sessions)
 
     return {
-        "template name": client_template.name,
+        "template_name": client_template.name,
         "check_in": checkin_result,
         "sessions": session_result
     }
