@@ -119,6 +119,23 @@ def signUp():
         verified=False, album_id=album_id, album_deletehash=album_deletehash
     )
 
+    # Create an album in imgur if we aren't being run by a test
+    create_album = True
+    if 'test' in body:
+        if body['test'] == True:
+            create_album = False
+
+    if create_album:
+        album_id, album_deletehash, code = createAlbum()
+        if code != 200:
+            print("Failed to create imgur album for user with code: " + str(code))
+            return {
+                "error": "Internal Server Error"
+            }, 500
+        
+        user.album_id = album_id
+        user.album_deletehash = album_deletehash
+
     try:
         db.session.add(user)
         db.session.commit()
