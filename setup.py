@@ -24,6 +24,7 @@ setup(
         'pytest-flask',
         'pytest-flask-sqlalchemy',
         'pytest-cov',
-        'python-slugify'
+        'python-slugify',
+        'requests'
     ],
 )
