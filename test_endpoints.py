@@ -708,6 +708,20 @@ def login_user_for_testing(client, user):
 
     return resp.json
 
+def logout_user_for_testing(client):
+    mimetype = 'application/json'
+    headers = {
+        'Content-Type': mimetype,
+        'Accept': mimetype
+    }
+
+    resp = client.get("/auth/logout")
+
+    assert resp.json != None
+    assert resp._status_code == 200
+
+    return resp.json
+
 def generate_client_template_model(active=True):
     return ClientTemplate(
         name='Test Client Template', slug='test-client-template', start_date='2020-12-12', completed=False, active=active, sessions=[
@@ -1151,6 +1165,23 @@ def test_get_checkin(client, db_session):
 
     # Retrieve sessions from a particular checkin corresponding to the created client_template_id
     url = '/checkin?checkin_id={}'.format(check_in.id)
+    checkin_resp, code = request(client, 'GET', url)
+    session_completed_date = dt.strptime(str(checkin_resp['sessions'][0]['completed_date']), '%Y-%m-%d')
+    checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d') 
+    assert code == 200
+    assert checkin_resp != None
+    assert checkin_resp['sessions'][0]['completed'] == True
+    assert session_completed_date > checkin_start_date
+
+    logout_resp = logout_user_for_testing(client)
+    assert logout_resp['success'] == True
+
+    # Sign in as the client
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Retrieve sessions from a particular checkin corresponding to the created client_template_id
+    url = '/checkin?client_id={}'.format(login_resp['user']['id'])
     checkin_resp, code = request(client, 'GET', url)
     session_completed_date = dt.strptime(str(checkin_resp['sessions'][0]['completed_date']), '%Y-%m-%d')
     checkin_start_date = dt.strptime(str(check_in.start_date), '%Y-%m-%d') 
