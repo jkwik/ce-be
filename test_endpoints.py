@@ -1061,6 +1061,7 @@ def test_get_client_training_logs(client, db_session):
     assert client_sessions != None
     assert len(client_sessions) == 2
     client_sessions[0].completed = True
+    client_sessions[0].completed_date = '2020-01-01'
     client_sessions[0].training_entries = [
         TrainingEntry(
             name='Test Exercise', category='Test Category', reps=10, sets=10, weight=150, order=1
@@ -1070,6 +1071,17 @@ def test_get_client_training_logs(client, db_session):
 
     # Retrieve client training log and check that 1 session is included with 1 training entry
     resp, code = request(client, "GET", "/client/trainingLog?client_id={}".format(client_user['user']['id']))
+    assert code == 200
+    assert len(resp['sessions']) == 1
+    assert len(resp['sessions'][0]['training_entries']) == 1
+
+    # Set the second session to true to test pagination
+    client_sessions[1].completed = True
+    client_sessions[1].completed_date = '2020-01-02'
+    db_session.commit()
+
+    # Return paginated sessions, even though there are 2 sessions, this should only return 1
+    resp, code = request(client, "GET", "/client/trainingLog?client_id={}&page=1&page_size=1".format(client_user['user']['id']))
     assert code == 200
     assert len(resp['sessions']) == 1
     assert len(resp['sessions'][0]['training_entries']) == 1
