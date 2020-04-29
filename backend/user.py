@@ -103,21 +103,30 @@ def signUp():
             "error": "Expected role of COACH or CLIENT"
         }, 400
 
-    # Create an album in imgur for the user to house their image uploads
-    album_id, album_deletehash, code = createAlbum()
-    if code != 200:
-        print("Failed to create imgur album for user with code: " + str(code))
-        return {
-            "error": "Internal Server Error"
-        }, 500
-
     # Create the user with the encoded password
     user = User(
         first_name=body['first_name'], last_name=body['last_name'],
         email=email, password=encodedPassword,
         approved=False, role=body['role'],
-        verified=False, album_id=album_id, album_deletehash=album_deletehash
+        verified=False
     )
+
+    # Create an album in imgur if we aren't being run by a test
+    create_album = True
+    if 'test' in body:
+        if body['test'] == True:
+            create_album = False
+
+    if create_album:
+        album_id, album_deletehash, code = createAlbum()
+        if code != 200:
+            print("Failed to create imgur album for user with code: " + str(code))
+            return {
+                "error": "Internal Server Error"
+            }, 500
+        
+        user.album_id = album_id
+        user.album_deletehash = album_deletehash
 
     try:
         db.session.add(user)
