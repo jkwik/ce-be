@@ -4,7 +4,7 @@ from backend.models.user import User, Role
 from backend.models.client_templates import ClientTemplate, client_template_schema, client_template_schemas, ClientSession, client_session_schema, ClientExercise, client_exercise_schema, client_session_schemas, TrainingEntry, CheckIn, check_in_schema, check_in_schemas, training_log_schemas
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent, setNonNullCheckinFields, setUpdateSessionFields
-from backend.helpers.general import makeTemplateSlugUnique
+from backend.helpers.general import makeTemplateSlugUnique, paginate
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import datetime as dt
@@ -486,8 +486,8 @@ def getTrainingLog(token_claims):
             "error": "No query parameter client_id found in query parameter"
         }, 400
 
-    # Grab all templates belonging to the client
-    client_templates = ClientTemplate.query.filter(ClientTemplate.user_id == client_id).all()
+    # Grab all templates belonging to the client, order templates descending by 
+    client_templates = ClientTemplate.query.filter(ClientTemplate.user_id == client_id).order_by(ClientTemplate.start_date.desc()).all()
 
     sessions = []
 
@@ -502,6 +502,17 @@ def getTrainingLog(token_claims):
     sessions = sorted(sessions, key=lambda k: k.completed_date, reverse=True)
 
     sessions_result = training_log_schemas.dump(sessions)
+
+    # Paginate the results if pagination is specified
+    page_size = request.args.get('page_size')
+    page = request.args.get('page')
+    if page_size != None and page != None:
+        paginated_sessions, current_page, end_page = paginate(sessions_result, int(page), int(page_size))
+        return {
+            "current_page": current_page,
+            "end_page": end_page,
+            "sessions": paginated_sessions
+        }
 
     return {
         "sessions": sessions_result
