@@ -510,23 +510,42 @@ def getTrainingLog(token_claims):
 @app.route("/checkin", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getCheckin(token_claims):
-    checkin_id = request.args.get('checkin_id')
-    if checkin_id == None:
-        return {
-            "error": "No query parameter checkin_id found in request"
+    if token_claims['role'] == Role.COACH.name:
+        checkin_id = request.args.get('checkin_id')
+
+        if checkin_id == None:
+            return {
+            "error": "checkin_id not found in query parameter, checkin_id must be passed when a coach calls this endpoint"
         }, 400
-    # get the checkin from the Checkins table with given checkin_id
-    checkin = CheckIn.query.filter_by(id=checkin_id).first()
+
+        # get the checkin from the Checkins table with given checkin_id
+        checkin = CheckIn.query.filter_by(id=checkin_id).first()
+    else:
+        client_id = request.args.get('client_id')
+
+        if client_id == None:
+            return {
+            "error": "client_id not found in query parameter, client_id must be passed when a client calls this endpoint"
+        }, 400
+        # get active client template that belongs to this client_id
+        template = ClientTemplate.query.filter(ClientTemplate.user_id==client_id, ClientTemplate.active==True).first()
+
+        if template == None:
+            return {
+                "error": "No active template found with client_id: " + client_id
+            }, 404
+        # get checkin using the client_template_id
+        checkin = CheckIn.query.filter_by(client_template_id=template.id).first()
 
     if checkin == None:
-        return {
-        "error": "No checkin found with supplied checkin_id"
-    }, 404
-
+            return {
+            "error": "No checkin found with the supplied parameter"
+        }, 404
+    
     # format the checkin_start_date and checkin_end_date so that we can compare them to the session_completed_date
     checkin_start_date = dt.strptime(str(checkin.start_date), '%Y-%m-%d')
 
-    # get the client templatee that the given checkin_id corresponds to
+    # get the client template that the given checkin_id corresponds to
     client_template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
     if client_template == None:
         return {
@@ -549,6 +568,7 @@ def getCheckin(token_claims):
     session_result = client_session_schemas.dump(valid_sessions)
 
     return {
+        "template name": client_template.name,
         "check_in": checkin_result,
         "sessions": session_result
     }
