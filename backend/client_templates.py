@@ -486,7 +486,7 @@ def getTrainingLog(token_claims):
             "error": "No query parameter client_id found in query parameter"
         }, 400
 
-    # Grab all templates belonging to the client, order templates descending by 
+    # Grab all templates belonging to the client, order templates descending by start_date
     client_templates = ClientTemplate.query.filter(ClientTemplate.user_id == client_id).order_by(ClientTemplate.start_date.desc()).all()
 
     sessions = []
