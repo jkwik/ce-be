@@ -709,12 +709,6 @@ def login_user_for_testing(client, user):
     return resp.json
 
 def logout_user_for_testing(client):
-    mimetype = 'application/json'
-    headers = {
-        'Content-Type': mimetype,
-        'Accept': mimetype
-    }
-
     resp = client.get("/auth/logout")
 
     assert resp.json != None
