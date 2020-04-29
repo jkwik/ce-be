@@ -3,3 +3,4 @@ __pycache__
 backend.egg-info
 htmlcov
 .coverage
+.vscode/settings.json
