@@ -133,6 +133,10 @@ class CheckIn(db.Model):
     start_date = db.Column(db.String, nullable=False)
     end_date = db.Column(db.String, nullable=True)
     completed = db.Column(db.Boolean, nullable=False)
+    front = db.Column(db.String, nullable=True)
+    back = db.Column(db.String, nullable=True)
+    side_a = db.Column(db.String, nullable=True)
+    side_b = db.Column(db.String, nullable=True)
 
 
 

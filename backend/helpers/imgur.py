@@ -26,3 +26,19 @@ def createAlbum():
         return None, None, resp['status']
 
     return resp['data']['id'], resp['data']['deletehash'],  resp['status']
+
+
+def addImage():
+    """
+   Adds a client input image to Create an anonymous album from imgur and returns the resulting delete hash and album id
+    Returns:
+        - album_id
+        - album_deletehash
+        - status code
+    """
+    resp = request("POST", ROOT_URL + '/album', headers=HEADERS).json()
+    
+    if resp['status'] != 200:
+        return None, None, resp['status']
+
+    return resp['data']['id'], resp['data']['deletehash'],  resp['status']
