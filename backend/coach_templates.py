@@ -25,7 +25,7 @@ def coachTemplates(token_claims):
     if templates == None:
         return {
             "error": "There are no Coach_templates"
-        }
+        }, 404
 
     result = coach_template_schemas.dump(templates)
 
