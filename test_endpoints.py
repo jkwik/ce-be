@@ -255,7 +255,30 @@ def test_terminate_client(client, db_session):
     assert code == 200 and resp != None
     assert resp['user']['approved'] == None
 
+def test_delete_user(client, db_session):
+    # create the user to delete
+    user = User(
+        first_name='Test', last_name='Test', email='test@test.com', password='test', role='CLIENT',
+        verified=True
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
 
+    # sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    url = "/user?id={}".format(user.id)
+    resp, code = request(client, "DELETE", url)
+
+    user = db_session.query(User).get(user.id)
+    assert user == None
 
 def test_get_user(client, db_session):
     #sign up a coach
@@ -277,6 +300,37 @@ def test_get_user(client, db_session):
     resp, code = request(client, "GET", url)
     assert code == 200 and resp != None
     assert resp['user']['id'] == client_user['user']['id']
+
+def test_approve_client(client, db_session):
+    # sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # create the user to approve
+    user = User(
+        first_name='Test', last_name='Test', email='test@test.com', password='test', role='CLIENT',
+        verified=True, approved=False
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    data = {
+        'id': user.id
+    }
+    resp, code = request(client, "PUT", "/approveClient", data=data)
+    assert code == 200
+    assert resp != None
+    assert resp['Approved'] != None
+
+    current_db_session = db_session.object_session(user)
+    current_db_session.refresh(user)
+    assert user.approved
 
 #  ----------------- CLIENT TEMPLATES -----------------
 def test_get_client_template(client, db_session):
@@ -686,6 +740,8 @@ def request(client, method, url, data=None):
         resp = client.post(url, data=json.dumps(data), headers=headers)
     elif method == "PUT":
         resp = client.put(url, data=json.dumps(data), headers=headers)
+    elif method == "DELETE":
+        resp = client.delete(url)
 
     return resp.json, resp._status_code
 
@@ -1281,7 +1337,7 @@ def test_submit_checkin(client, db_session):
                 ]
             }
         ]
-        
+
     }
 
     resp, code = request(client, "PUT", '/submitCheckin', data=data)
