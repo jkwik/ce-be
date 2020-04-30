@@ -5,11 +5,13 @@ from backend.models.client_templates import ClientTemplate, client_template_sche
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, coach_exercise_schema
 from backend.helpers.client_templates import findNextSessionOrder, setNonNullClientTemplateFields, setNonNullClientSessionFields, isSessionPresent, setNonNullCheckinFields, setUpdateSessionFields
 from backend.helpers.general import makeTemplateSlugUnique, paginate
+from backend.helpers.imgur import addImage
 from flask import request
 from sqlalchemy.orm import load_only, Load, subqueryload
 from datetime import datetime as dt
 from datetime import date, timedelta
 from slugify import slugify
+import json
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -661,7 +663,8 @@ def getClientCheckins(token_claims):
 @app.route("/submitCheckin", methods=["PUT"])
 @http_guard(renew=True, nullable=False)
 def submitCheckin(token_claims):
-    body = request.get_json(force=True)
+    form = request.form['body']
+    body = json.loads(form)
 
     if 'sessions' not in body and 'check_in' not in body:
         return {
@@ -695,18 +698,77 @@ def submitCheckin(token_claims):
                 }, 500
                 raise
         client_session_results = client_session_schemas.dump(client_sessions)
+    else:
+        client_session_results = None
     
     # update the check_in fields as necessary
     if 'check_in' in body:
         checkin = CheckIn.query.filter_by(id=body['check_in']['id']).first()
         setNonNullCheckinFields(checkin, body['check_in'])
+
+        # post an image to imgur if this endpoint is not being run by a test
+        create_image = True
+        if 'test' in body:
+            if body['test'] == True:
+                create_image = False
+        
+        if create_image:
+            # get the album the image needs to be added to
+            template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
+            if template == None:
+                return {
+                    "error": "No template found with checkin_id: " + str(body['check_in']['id'])
+                }, 404
+            user = User.query.filter_by(id=template.user_id).first()
+            if user == None:
+                return {
+                    "error": "No user found with client_template_id: " + str(body['check_in']['id'])
+                }, 404
+            album = user.album_deletehash              
+            if 'front' in request.files:
+                front = request.files['front']
+                image_link, code = addImage(album, front)
+                if code != 200:
+                    print("Failed to add front image to imgur album for user with code: " + str(code))
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+                checkin.front = image_link
+            if 'back' in request.files:
+                back = request.files['back']
+                image_link, code = addImage(album, back)
+                if code != 200:
+                    print("Failed to add back image to imgur album for user with code: " + str(code))
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+                checkin.back = image_link
+            if 'side_a' in request.files:
+                side_a = request.files['side_a']
+                image_link, code = addImage(album, side_a)
+                if code != 200:
+                    print("Failed to add side_a image to imgur album for user with code: " + str(code))
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+                checkin.side_a = image_link
+            if 'side_b' in request.files:
+                side_b = request.files['side_b']
+                image_link, code = addImage(album, side_b)
+                if code != 200:
+                    print("Failed to add side_b image to imgur album for user with code: " + str(code))
+                    return {
+                        "error": "Internal Server Error"
+                    }, 500
+                checkin.side_b = image_link
+
         try:
             db.session.commit()
             db.session.refresh(checkin)
         except Exception as e:
             print(e)
             return {
-                "error": "Internal Server Error"
+                "error": "Internal Server Error here"
             }, 500
             raise
         check_in_result = check_in_schema.dump(checkin)

@@ -1256,6 +1256,7 @@ def test_submit_checkin(client, db_session):
     assert check_in != None
 
     data = {
+        "test": True,
         "check_in": {
             "client_comment": None,
             "client_template_id": resp['id'],
