@@ -663,8 +663,11 @@ def getClientCheckins(token_claims):
 @app.route("/submitCheckin", methods=["PUT"])
 @http_guard(renew=True, nullable=False)
 def submitCheckin(token_claims):
-    form = request.form['body']
-    body = json.loads(form)
+    try:
+        form = request.form['body']
+        body = json.loads(form)
+    except Exception as e:
+        body = request.get_json(force=True)
 
     if 'sessions' not in body and 'check_in' not in body:
         return {
