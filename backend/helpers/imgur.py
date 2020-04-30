@@ -12,6 +12,13 @@ HEADERS = {
     'Authorization': os.getenv('IMGUR_AUTH_HEADER')
 }
 
+ADD_IMAGE_HEADERS = {
+    'x-rapidapi-host': os.getenv('X_RAPIDAPI_HOST'),
+    'x-rapidapi-key': os.getenv('X_RAPIDAPI_KEY'),
+    'Authorization': os.getenv('IMGUR_AUTH_HEADER'),
+    'content-type': "application/x-www-form-urlencoded"
+}
+
 def createAlbum():
     """
     Create album creates an anonymous album from imgur and returns the resulting delete hash and album id
@@ -28,17 +35,23 @@ def createAlbum():
     return resp['data']['id'], resp['data']['deletehash'],  resp['status']
 
 
-def addImage():
+def addImage(album, image):
     """
-   Adds a client input image to Create an anonymous album from imgur and returns the resulting delete hash and album id
+    Adds a client image to an anonymous album from imgur and returns the resulting link and status code
     Returns:
-        - album_id
-        - album_deletehash
+        - image link
         - status code
     """
-    resp = request("POST", ROOT_URL + '/album', headers=HEADERS).json()
+
+    image_data = image.read()
+    payload = {
+        "album": album,
+        "image": image_data
+    }
+
+    resp = request("POST", ROOT_URL + '/image', data=payload, headers=ADD_IMAGE_HEADERS).json()
     
     if resp['status'] != 200:
-        return None, None, resp['status']
+        return None, resp['status']
 
-    return resp['data']['id'], resp['data']['deletehash'],  resp['status']
+    return resp['data']['link'], resp['status']

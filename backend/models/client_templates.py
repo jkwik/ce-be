@@ -142,7 +142,7 @@ class CheckIn(db.Model):
 
 class CheckInSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'client_template_id', 'coach_comment', 'client_comment', 'start_date', 'end_date', 'completed')
+        fields = ('id', 'client_template_id', 'coach_comment', 'client_comment', 'start_date', 'end_date', 'completed', 'front', 'back', 'side_a', 'side_b')
 
 check_in_schema = CheckInSchema()
 check_in_schemas = CheckInSchema(many=True) 
