@@ -403,8 +403,21 @@ def test_get_client_template(client, db_session):
     db_session.commit()
     db_session.refresh(template)
 
-    # Retrieve template using api
+    # Calling endpoint without client_template_id should return a 400
+    url = '/client/template'
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == 'Need to pass EITHER client_template_id or client_template_slug as a request parameter'
+
+    # Retrieve template id
     url = '/client/template?client_template_id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
+    # Retrieve template using slug
+    url = '/client/template?client_template_slug={}'.format(template.slug)
     resp, code = request(client, "GET", url)
     assert code == 200
     assert resp != None
@@ -429,6 +442,12 @@ def test_get_client_templates(client, db_session):
     db_session.commit()
     db_session.refresh(template1)
     db_session.refresh(template2)
+
+    # Check that we get a 400 back if we don't supply the user_id
+    url = '/client/templates'
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == 'No query parameter user_id found in request'
 
     url = '/client/templates?user_id={}'.format(str(user['user']['id']))
     resp, code = request(client, "GET", url)
@@ -477,27 +496,40 @@ def test_post_client_template(client, db_session):
         'role': 'CLIENT',
         'template_id': client_template.id,
         'client_id': client_user['user']['id'],
-        'sessions': [
-            {
-                'id': client_template.sessions[0].id,
-                'exercises': [
-                    {
-                        'id': client_template.sessions[0].exercises[0].id,
-                        'sets': 4,
-                        'reps': 10,
-                        'weight': 150
-                    }
-                ]
-            }
-        ],
     }
+
+    # Create template without sessions, should get 400 back
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 400
+    assert resp['error'] == 'Need to specify a valid template_id (int), client_id (int), sessions (array), and role (enum)'
+
+    data['sessions'] = []
+
+    # Create template with empty sessions, should return 400
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 400
+    assert resp['error'] == 'Length of sessions supplied is 0'
+
+    data['sessions'] = [
+        {
+            'id': client_template.sessions[0].id,
+            'exercises': [
+                {
+                    'id': client_template.sessions[0].exercises[0].id,
+                    'sets': 4,
+                    'reps': 10,
+                    'weight': 150
+                }
+            ]
+        }
+    ]
+
     resp, code = request(client, "POST", "/client/template", data=data)
     assert code == 200
     assert resp != None
     assert resp['slug'] == 'test-coach-template-2-test-client-1'
     assert resp['sessions'] != None
     assert len(resp['sessions']) == 1
-    # pdb.set_trace()
 
 def test_put_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -522,7 +554,6 @@ def test_put_client_template(client, db_session):
     # Change name of template and ordering or sessions
     # TODO: Need to test deleting a session through this endpoint. Getting make_transient error
     data = {
-        'id': 1,
         'name': 'Test Template Name Change',
         'user_id': client_user['user']['id'],
         'sessions': [
@@ -538,6 +569,12 @@ def test_put_client_template(client, db_session):
             }
         ]
     }
+
+    # Not specifying an id should return 400
+    updated_client_template, code = request(client, "PUT", '/client/template', data=data)
+    assert code == 400
+
+    data['id'] = 1
 
     updated_client_template, code = request(client, "PUT", '/client/template', data=data)
     assert updated_client_template != None and code == 200
