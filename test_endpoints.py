@@ -669,9 +669,6 @@ def sign_up_user_for_testing(client, user):
     assert resp.json != None
     assert resp._status_code == 200
 
-    user = User.query.get(resp.json['user']['id'])
-    assert user.album_id == None
-
     return resp.json
 
 # request is a helper method to make a request with the application client
