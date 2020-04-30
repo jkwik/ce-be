@@ -51,7 +51,7 @@ def deleteUser(token_claims):
     id = request.args.get('id')
     if id == None:
         return {
-            "error": "No id paramter found in request query"
+            "error": "No id parameter found in request query"
         }, 400
 
     user = User.query.get(id)

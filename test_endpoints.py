@@ -62,7 +62,7 @@ def _db():
 
     return db
 
-#  ----------------- CONFIGURATION TEST -----------------
+#  ------------------------------------- CONFIGURATION TEST -------------------------------------
 
 # Test that the mocked db_session works and doesn't persist beyond the scope of a test
 def test_a_transaction(db_session):
@@ -84,7 +84,19 @@ def test_health(client):
     assert code == 200
     assert resp == {'success': True}
 
-#  ----------------- USER TESTS -----------------
+#  ------------------------------------- USER TESTS -------------------------------------
+def role_check(client, db_session, request_type, url):
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the client
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+    resp, code = request(client, request_type, url)
+    return resp, code
+    
+
 
 def test_signup(client, db_session):
     resp = sign_up_user_for_testing(client, test_client)
@@ -179,7 +191,9 @@ def test_update_profile(client, db_session):
     data = {
         'first_name': 'changed first name',
         'last_name': 'changed last name',
-        'email': 'changed@email.com'
+        'email': 'changed@email.com',
+        'password': 'changedpassword',
+        'oldpassword': 'fakepassword'
     }
 
     # make updates
@@ -188,6 +202,10 @@ def test_update_profile(client, db_session):
     assert resp['user']['first_name'] == 'changed first name'
     assert resp['user']['last_name'] == 'changed last name'
     assert resp['user']['email'] == 'changed@email.com'
+
+    # call updates with no data to test that nothing happens
+    resp, code = request(client, "PUT", '/updateProfile', data={})
+    assert code == 200
 
 
 # def test_logout(client):
@@ -232,7 +250,7 @@ def test_forgot_password_flow(client, db_session):
     assert bcrypt.check_password_hash(user.password, data['password'].encode(encoding='utf-8'))
 
 def test_terminate_client(client, db_session):
-    #sign up a coach
+    # sign up a coach
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
     assert coach_user['user']['role'] == 'COACH'
@@ -242,35 +260,94 @@ def test_terminate_client(client, db_session):
     assert client_user['user'] != None
     assert client_user['user']['role'] == 'CLIENT'
 
-    # login as coach
-    login_resp = login_user_for_testing(client, test_coach)
-    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
-
-    # remove a client
     data = {
         "id": client_user['user']['id']
     }
 
+    # remove a client with insufficient permissions, should return 400
+    resp, code = request(client, "PUT", '/terminateClient', data=data)
+    assert code == 400 and resp != None
+    assert resp['error'] == 'Expected role of COACH'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # remove a client logged in as coach, should succeed
     resp, code = request(client, "PUT", '/terminateClient', data=data)
     assert code == 200 and resp != None
     assert resp['user']['approved'] == None
 
+def test_delete_user(client, db_session):
+    # create the user to delete
+    user = User(
+        first_name='Test', last_name='Test', email='test@test.com', password='test', role='CLIENT',
+        verified=True
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
 
-
-def test_get_user(client, db_session):
-    #sign up a coach
+    # sign up a coach
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
     assert coach_user['user']['role'] == 'COACH'
 
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Delete user with no id parameter, check that 400 is returned
+    url = "/user"
+    resp, code = request(client, "DELETE", url)
+    assert code == 400
+    assert resp['error'] == 'No id parameter found in request query'
+
+    # Delete user with no bogus id, check that 404 is returned
+    url = "/user?id={}".format(420)
+    resp, code = request(client, "DELETE", url)
+    assert code == 404
+    assert resp['error'] == 'No user found with passed id'
+
+    # Delete user
+    url = "/user?id={}".format(user.id)
+    resp, code = request(client, "DELETE", url)
+
+    user = db_session.query(User).get(user.id)
+    assert user == None
+
+def test_get_user(client, db_session):
     # sign up a client
     client_user = sign_up_user_for_testing(client, test_client)
     assert client_user['user'] != None
     assert client_user['user']['role'] == 'CLIENT'
 
+    # get client with invalid credentials. should return 400
+    url = '/getUser?id={}'.format(client_user['user']['id'])
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == 'Expected role of COACH'
+
+    # sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
     # login as coach
     login_resp = login_user_for_testing(client, test_coach)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # get client with no id parameter, should return 404
+    url = '/getUser'
+    resp, code = request(client, "GET", url)
+    assert code == 404
+    assert resp['error'] == 'No id parameter found in request'
+
+    # get client with bogus id, should return 404
+    url = '/getUser?id={}'.format(420)
+    resp, code = request(client, "GET", url)
+    assert code == 404
+    assert resp['error'] == 'Invalid id'
 
     # get client
     url = '/getUser?id={}'.format(client_user['user']['id'])
@@ -278,7 +355,38 @@ def test_get_user(client, db_session):
     assert code == 200 and resp != None
     assert resp['user']['id'] == client_user['user']['id']
 
-#  ----------------- CLIENT TEMPLATES -----------------
+def test_approve_client(client, db_session):
+    # sign up a coach
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # login as coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # create the user to approve
+    user = User(
+        first_name='Test', last_name='Test', email='test@test.com', password='test', role='CLIENT',
+        verified=True, approved=False
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    data = {
+        'id': user.id
+    }
+    resp, code = request(client, "PUT", "/approveClient", data=data)
+    assert code == 200
+    assert resp != None
+    assert resp['Approved'] != None
+
+    current_db_session = db_session.object_session(user)
+    current_db_session.refresh(user)
+    assert user.approved
+
+#  ------------------------------------------- CLIENT TEMPLATES ------------------------------------------------------
 def test_get_client_template(client, db_session):
     # Create and sign into the client
     user = sign_up_user_for_testing(client, test_client)
@@ -295,8 +403,21 @@ def test_get_client_template(client, db_session):
     db_session.commit()
     db_session.refresh(template)
 
-    # Retrieve template using api
+    # Calling endpoint without client_template_id should return a 400
+    url = '/client/template'
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == 'Need to pass EITHER client_template_id or client_template_slug as a request parameter'
+
+    # Retrieve template id
     url = '/client/template?client_template_id={}'.format(str(template.id))
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
+    # Retrieve template using slug
+    url = '/client/template?client_template_slug={}'.format(template.slug)
     resp, code = request(client, "GET", url)
     assert code == 200
     assert resp != None
@@ -321,6 +442,12 @@ def test_get_client_templates(client, db_session):
     db_session.commit()
     db_session.refresh(template1)
     db_session.refresh(template2)
+
+    # Check that we get a 400 back if we don't supply the user_id
+    url = '/client/templates'
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == 'No query parameter user_id found in request'
 
     url = '/client/templates?user_id={}'.format(str(user['user']['id']))
     resp, code = request(client, "GET", url)
@@ -359,7 +486,7 @@ def test_post_client_template(client, db_session):
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=3)
     assert code == 200
     assert resp != None
-    assert resp['slug'] == 'test-coach-template-test-client-1'
+    assert resp['slug'] == 'test-coach-template-2-test-client'
 
     # Create a third client template using a previous client template to test re-assigning and slugification
     client_template = ClientTemplate.query.get(resp['id'])
@@ -369,24 +496,38 @@ def test_post_client_template(client, db_session):
         'role': 'CLIENT',
         'template_id': client_template.id,
         'client_id': client_user['user']['id'],
-        'sessions': [
-            {
-                'id': client_template.sessions[0].id,
-                'exercises': [
-                    {
-                        'id': client_template.sessions[0].exercises[0].id,
-                        'sets': 4,
-                        'reps': 10,
-                        'weight': 150
-                    }
-                ]
-            }
-        ],
     }
+
+    # Create template without sessions, should get 400 back
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 400
+    assert resp['error'] == 'Need to specify a valid template_id (int), client_id (int), sessions (array), and role (enum)'
+
+    data['sessions'] = []
+
+    # Create template with empty sessions, should return 400
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 400
+    assert resp['error'] == 'Length of sessions supplied is 0'
+
+    data['sessions'] = [
+        {
+            'id': client_template.sessions[0].id,
+            'exercises': [
+                {
+                    'id': client_template.sessions[0].exercises[0].id,
+                    'sets': 4,
+                    'reps': 10,
+                    'weight': 150
+                }
+            ]
+        }
+    ]
+
     resp, code = request(client, "POST", "/client/template", data=data)
     assert code == 200
     assert resp != None
-    assert resp['slug'] == 'test-coach-template-test-client-2'
+    assert resp['slug'] == 'test-coach-template-2-test-client-1'
     assert resp['sessions'] != None
     assert len(resp['sessions']) == 1
 
@@ -413,7 +554,6 @@ def test_put_client_template(client, db_session):
     # Change name of template and ordering or sessions
     # TODO: Need to test deleting a session through this endpoint. Getting make_transient error
     data = {
-        'id': 1,
         'name': 'Test Template Name Change',
         'user_id': client_user['user']['id'],
         'sessions': [
@@ -429,6 +569,12 @@ def test_put_client_template(client, db_session):
             }
         ]
     }
+
+    # Not specifying an id should return 400
+    updated_client_template, code = request(client, "PUT", '/client/template', data=data)
+    assert code == 400
+
+    data['id'] = 1
 
     updated_client_template, code = request(client, "PUT", '/client/template', data=data)
     assert updated_client_template != None and code == 200
@@ -645,7 +791,7 @@ def test_get_active_client_template(client, db_session):
     assert resp != None
     assert resp['id'] == template1.id
 
-#  ----------------- HELPER METHODS -------------------
+#  ------------------------------------- HELPER METHODS -------------------------------------
 
 # sign up a user. It returns the user response. It also error checks
 def sign_up_user_for_testing(client, user):
@@ -686,6 +832,8 @@ def request(client, method, url, data=None):
         resp = client.post(url, data=json.dumps(data), headers=headers)
     elif method == "PUT":
         resp = client.put(url, data=json.dumps(data), headers=headers)
+    elif method == "DELETE":
+        resp = client.delete(url)
 
     return resp.json, resp._status_code
 
@@ -737,15 +885,22 @@ def generate_coach_template_model(db_session, id):
     db_session.add(Exercise(id=id, category='Lower Back', name='Deadlifts'))
     db_session.add(Exercise(id=id + 1, category='Latisimus Dorsi', name='Pullups'))
     db_session.commit()
+    if id == 1:
+        name = 'Test Coach Template'
+        slug = 'test-coach-template'
+    elif id == 3:
+        name = 'Test Coach Template 2'
+        slug = 'test-coach-template-2'
+
     return CoachTemplate(
-        id=id, name='Test Coach Template', slug='test-coach-template', sessions=[
+        id=id, name=name, slug=slug, sessions=[
             CoachSession(
                 name='Test Session 1', slug='test-session-1', order=1, coach_exercises=[
                     CoachExercise(
-                        exercise_id=id, order=1
+                        exercise_id=id, order=1,
                     ),
                     CoachExercise(
-                        exercise_id=id + 1, order=1
+                        exercise_id=id + 1, order=2
                     )
                 ]
             ),
@@ -755,7 +910,7 @@ def generate_coach_template_model(db_session, id):
                         exercise_id=id, order=1
                     ),
                     CoachExercise(
-                        exercise_id=id + 1, order=1
+                        exercise_id=id + 1, order=2
                     )
                 ]
             )
@@ -815,10 +970,37 @@ def create_coach_template(client, db_session):
     resp, code = request(client, "POST", '/coach/template', data=data)
     return resp, code, coach_template
 
+def create_coach_template_alt(client, db_session):
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model(db_session, 3)
+    
+    data = {
+        'name': coach_template.name,
+        'sessions': []
+    }
+    # # Specify the sets, reps and weight of the coach exercises within the sessions
+    count = 0
+    for coach_session in coach_template.sessions:
+        session = {'name': coach_session.name, 'order': coach_session.order, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'name': "exercise_name" + "_" + str(count),
+                'category': "exercise_category" + "_" + str(count),
+                'order': coach_exercise.order
+            })
+            count += 1
+        data['sessions'].append(session)
+    
+    resp, code = request(client, "POST", '/coach/template', data=data)
+    return resp, code, coach_template
 
 
-#  ----------------- COACH TEMPLATES -----------------
+
+#  ------------------------------------- COACH TEMPLATES -------------------------------------
 def test_get_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create and sign into the client
     coach = sign_up_user_for_testing(client, test_coach)
     assert coach['user'] != None
@@ -840,9 +1022,22 @@ def test_get_coach_template(client, db_session):
     assert resp != None
     assert resp['id'] == template.id
 
+    # call endpoint with tempalte slug
+    template_slug = template.slug
+    url = '/coach/template?coach_template_slug={}'.format(template_slug)
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
 
 def test_get_coach_templates(client, db_session):
-    # Create and sign into the client
+    # role check
+    result, code = role_check(client, db_session, "GET", '/coach/templates')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+   
+    # Create and sign into the coach
     coach = sign_up_user_for_testing(client, test_coach)
     assert coach['user'] != None
     assert coach['user']['role'] == 'COACH'
@@ -867,6 +1062,9 @@ def test_get_coach_templates(client, db_session):
 
 
 def test_post_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "POST", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -883,7 +1081,17 @@ def test_post_coach_template(client, db_session):
     assert resp['name'] == coach_template.name
     assert resp['slug'] == 'test-coach-template'
 
+    # Create alternate coach template
+    result, code, coach_template = create_coach_template_alt(client, db_session)
+    assert code == 200
+    assert result != None
+    assert result['name'] == 'Test Coach Template 2'
+    assert result['slug'] == 'test-coach-template-2'
+
 def test_put_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -929,7 +1137,36 @@ def test_put_coach_template(client, db_session):
     assert updated_coach_template['sessions'][0]['name'] == 'Test Session Name Change 1' and updated_coach_template['sessions'][0]['id'] == data['sessions'][1]['id']
     assert updated_coach_template['sessions'][1]['name'] == 'Test Session Name Change 2' and updated_coach_template['sessions'][1]['id'] == data['sessions'][0]['id']
 
+def test_delete_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/template/delete')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create and sign into the client
+    coach = sign_up_user_for_testing(client, test_coach)
+    assert coach['user'] != None
+    assert coach['user']['role'] == 'COACH'
+
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_coach_template_model(db_session, 1)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
+
+    # Retrieve template using api
+    body = {'coach_template_id': str(template.id)}
+
+    resp, code = request(client, "PUT", '/coach/template/delete', data=body)
+    assert code == 200
+    assert resp != None
+    assert resp['success'] == True
+
 def test_get_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -952,8 +1189,21 @@ def test_get_coach_session(client, db_session):
     assert coach_session != None
     assert coach_session['id'] == resp['sessions'][0]['id']
 
+    # call endpoint with coach_template slug and coach_session slug
+    template_slug = resp['slug']
+    session_slug = coach_session['slug']
+    url = '/coach/session?coach_template_slug={}&coach_session_slug={}'.format(template_slug, session_slug)
+    coach_session, code = request(client, 'GET', url)
+    # pdb.set_trace()
+    assert code == 200
+    assert coach_session != None
+    assert coach_session['id'] == resp['sessions'][0]['id']
+
 
 def test_post_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "POST", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -998,6 +1248,9 @@ def test_post_coach_session(client, db_session):
 
 
 def test_put_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -1036,6 +1289,79 @@ def test_put_coach_session(client, db_session):
     assert resp != None
     assert len(resp['coach_exercises']) == 1
     assert resp['name'] == 'Coach session name change'
+
+def test_get_coach_exercise(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/exercise')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    template = generate_coach_template_model(db_session, 1)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
+
+    result, code = request(client, "GET", "/coach/exercise?coach_exercise_id={}".format(template.sessions[0].coach_exercises[0].id))
+    
+    assert code == 200
+    assert result != None
+    assert result['id'] == template.sessions[0].coach_exercises[0].id
+
+
+def test_get_exercises(client, db_session):
+    result, code = role_check(client, db_session, "GET", "/exercises")
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create exercises
+    db_session.add(Exercise(id=1, category='Lower Back', name='Deadlifts'))
+    db_session.add(Exercise(id=2, category='Latisimus Dorsi', name='Pullups'))
+    db_session.commit()
+
+    result, code = request(client, "GET", "/exercises")
+    
+    assert code == 200
+    assert result != None
+    assert len(result['exercises']) == 2
+
+def test_post_exercise(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    body = {
+        'category': 'Back',
+        'name': 'Lateral Rows'
+    }
+  
+    result, code = request(client, "POST", "/exercise", data=body)
+    assert code == 200
+    assert result != None
+    assert len(result['exercises']) == 1
+    assert result['exercises'][0]['category'] == body['category']
+    assert result['exercises'][0]['name'] == body['name']
+
 
 # TRAINING LOG
 def test_get_client_training_logs(client, db_session):
@@ -1088,7 +1414,7 @@ def test_get_client_training_logs(client, db_session):
     assert len(resp['sessions']) == 1
     assert len(resp['sessions'][0]['training_entries']) == 1
 
-# CHECKINS
+# ------------------------------------- CHECKINS -------------------------------------
 def test_get_checkins(client, db_session):
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
@@ -1281,7 +1607,7 @@ def test_submit_checkin(client, db_session):
                 ]
             }
         ]
-        
+
     }
 
     resp, code = request(client, "PUT", '/submitCheckin', data=data)
