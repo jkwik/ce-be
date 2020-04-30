@@ -18,7 +18,7 @@ def coachTemplates(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+    }, 401
 
     templates = CoachTemplate.query.all()
 
@@ -41,7 +41,7 @@ def coachTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+    }, 401
 
     id = request.args.get('coach_template_id')
     slug = request.args.get('coach_template_slug')
@@ -79,7 +79,7 @@ def coachSession(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+        }, 401
 
     session_id = request.args.get('coach_session_id')
     template_slug = request.args.get('coach_template_slug')
@@ -125,7 +125,7 @@ def coachExercise(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+    }, 401
 
     id = request.args.get('coach_exercise_id')
 
@@ -154,7 +154,7 @@ def exercises(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+    }, 401
     
     exercises = Exercise.query.all()
 
@@ -177,7 +177,7 @@ def createTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+        }, 401
 
     body = request.get_json(force=True)
 
@@ -261,7 +261,7 @@ def createSession(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+        }, 401
 
     body = request.get_json(force=True)
 
@@ -353,7 +353,7 @@ def createExercise(token_claims):
     if token_claims['role'] != Role.COACH.name and token_claims['role'] != Role.CLIENT.name:
         return {
             "error": "Expected role of COACH or CLIENT"
-        }, 400
+        }, 401
 
     body = request.get_json(force=True)
     
@@ -389,7 +389,7 @@ def deleteTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-    }, 400
+    }, 401
 
     body = request.get_json(force=True)
     id = body['coach_template_id']
@@ -430,7 +430,7 @@ def updateTemplate(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+        }, 401
 
     body = request.get_json(force=True)
 
@@ -479,7 +479,7 @@ def updateSession(token_claims):
     if token_claims['role'] != Role.COACH.name:
         return {
             "error": "Expected role of COACH"
-        }, 400
+        }, 401
 
     body = request.get_json(force=True)
 

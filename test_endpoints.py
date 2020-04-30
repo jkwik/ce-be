@@ -85,6 +85,18 @@ def test_health(client):
     assert resp == {'success': True}
 
 #  ----------------- USER TESTS -----------------
+def role_check(client, db_session, request_type, url):
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
+
+    # Sign in as the client
+    login_resp = login_user_for_testing(client, test_client)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+    resp, code = request(client, request_type, url)
+    return resp, code
+    
+
 
 def test_signup(client, db_session):
     resp = sign_up_user_for_testing(client, test_client)
@@ -359,7 +371,7 @@ def test_post_client_template(client, db_session):
     resp, code, coach_template = create_client_template(client, db_session, client_user['user']['id'], starting_exercise_id=3)
     assert code == 200
     assert resp != None
-    assert resp['slug'] == 'test-coach-template-test-client-1'
+    assert resp['slug'] == 'test-coach-template-2-test-client'
 
     # Create a third client template using a previous client template to test re-assigning and slugification
     client_template = ClientTemplate.query.get(resp['id'])
@@ -386,9 +398,10 @@ def test_post_client_template(client, db_session):
     resp, code = request(client, "POST", "/client/template", data=data)
     assert code == 200
     assert resp != None
-    assert resp['slug'] == 'test-coach-template-test-client-2'
+    assert resp['slug'] == 'test-coach-template-2-test-client-1'
     assert resp['sessions'] != None
     assert len(resp['sessions']) == 1
+    # pdb.set_trace()
 
 def test_put_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -737,15 +750,22 @@ def generate_coach_template_model(db_session, id):
     db_session.add(Exercise(id=id, category='Lower Back', name='Deadlifts'))
     db_session.add(Exercise(id=id + 1, category='Latisimus Dorsi', name='Pullups'))
     db_session.commit()
+    if id == 1:
+        name = 'Test Coach Template'
+        slug = 'test-coach-template'
+    elif id == 3:
+        name = 'Test Coach Template 2'
+        slug = 'test-coach-template-2'
+
     return CoachTemplate(
-        id=id, name='Test Coach Template', slug='test-coach-template', sessions=[
+        id=id, name=name, slug=slug, sessions=[
             CoachSession(
                 name='Test Session 1', slug='test-session-1', order=1, coach_exercises=[
                     CoachExercise(
-                        exercise_id=id, order=1
+                        exercise_id=id, order=1,
                     ),
                     CoachExercise(
-                        exercise_id=id + 1, order=1
+                        exercise_id=id + 1, order=2
                     )
                 ]
             ),
@@ -755,7 +775,7 @@ def generate_coach_template_model(db_session, id):
                         exercise_id=id, order=1
                     ),
                     CoachExercise(
-                        exercise_id=id + 1, order=1
+                        exercise_id=id + 1, order=2
                     )
                 ]
             )
@@ -815,10 +835,37 @@ def create_coach_template(client, db_session):
     resp, code = request(client, "POST", '/coach/template', data=data)
     return resp, code, coach_template
 
+def create_coach_template_alt(client, db_session):
+    # Create a coach template to assign to a client
+    coach_template = generate_coach_template_model(db_session, 3)
+    
+    data = {
+        'name': coach_template.name,
+        'sessions': []
+    }
+    # # Specify the sets, reps and weight of the coach exercises within the sessions
+    count = 0
+    for coach_session in coach_template.sessions:
+        session = {'name': coach_session.name, 'order': coach_session.order, 'coach_exercises': []}
+        for coach_exercise in coach_session.coach_exercises:
+            session['coach_exercises'].append({
+                'name': "exercise_name" + "_" + str(count),
+                'category': "exercise_category" + "_" + str(count),
+                'order': coach_exercise.order
+            })
+            count += 1
+        data['sessions'].append(session)
+    
+    resp, code = request(client, "POST", '/coach/template', data=data)
+    return resp, code, coach_template
+
 
 
 #  ----------------- COACH TEMPLATES -----------------
 def test_get_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create and sign into the client
     coach = sign_up_user_for_testing(client, test_coach)
     assert coach['user'] != None
@@ -840,9 +887,22 @@ def test_get_coach_template(client, db_session):
     assert resp != None
     assert resp['id'] == template.id
 
+    # call endpoint with tempalte slug
+    template_slug = template.slug
+    url = '/coach/template?coach_template_slug={}'.format(template_slug)
+    resp, code = request(client, "GET", url)
+    assert code == 200
+    assert resp != None
+    assert resp['id'] == template.id
+
 
 def test_get_coach_templates(client, db_session):
-    # Create and sign into the client
+    # role check
+    result, code = role_check(client, db_session, "GET", '/coach/templates')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+   
+    # Create and sign into the coach
     coach = sign_up_user_for_testing(client, test_coach)
     assert coach['user'] != None
     assert coach['user']['role'] == 'COACH'
@@ -867,6 +927,9 @@ def test_get_coach_templates(client, db_session):
 
 
 def test_post_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "POST", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -883,7 +946,17 @@ def test_post_coach_template(client, db_session):
     assert resp['name'] == coach_template.name
     assert resp['slug'] == 'test-coach-template'
 
+    # Create alternate coach template
+    result, code, coach_template = create_coach_template_alt(client, db_session)
+    assert code == 200
+    assert result != None
+    assert result['name'] == 'Test Coach Template 2'
+    assert result['slug'] == 'test-coach-template-2'
+
 def test_put_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/template')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -929,7 +1002,36 @@ def test_put_coach_template(client, db_session):
     assert updated_coach_template['sessions'][0]['name'] == 'Test Session Name Change 1' and updated_coach_template['sessions'][0]['id'] == data['sessions'][1]['id']
     assert updated_coach_template['sessions'][1]['name'] == 'Test Session Name Change 2' and updated_coach_template['sessions'][1]['id'] == data['sessions'][0]['id']
 
+def test_delete_coach_template(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/template/delete')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create and sign into the client
+    coach = sign_up_user_for_testing(client, test_coach)
+    assert coach['user'] != None
+    assert coach['user']['role'] == 'COACH'
+
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create a template for retrieval
+    template = generate_coach_template_model(db_session, 1)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
+
+    # Retrieve template using api
+    body = {'coach_template_id': str(template.id)}
+
+    resp, code = request(client, "PUT", '/coach/template/delete', data=body)
+    assert code == 200
+    assert resp != None
+    assert resp['success'] == True
+
 def test_get_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -952,8 +1054,21 @@ def test_get_coach_session(client, db_session):
     assert coach_session != None
     assert coach_session['id'] == resp['sessions'][0]['id']
 
+    # call endpoint with coach_template slug and coach_session slug
+    template_slug = resp['slug']
+    session_slug = coach_session['slug']
+    url = '/coach/session?coach_template_slug={}&coach_session_slug={}'.format(template_slug, session_slug)
+    coach_session, code = request(client, 'GET', url)
+    # pdb.set_trace()
+    assert code == 200
+    assert coach_session != None
+    assert coach_session['id'] == resp['sessions'][0]['id']
+
 
 def test_post_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "POST", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -998,6 +1113,9 @@ def test_post_coach_session(client, db_session):
 
 
 def test_put_coach_session(client, db_session):
+    result, code = role_check(client, db_session, "PUT", '/coach/session')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
     assert coach_user['user'] != None
@@ -1036,6 +1154,79 @@ def test_put_coach_session(client, db_session):
     assert resp != None
     assert len(resp['coach_exercises']) == 1
     assert resp['name'] == 'Coach session name change'
+
+def test_get_coach_exercise(client, db_session):
+    result, code = role_check(client, db_session, "GET", '/coach/exercise')
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create the coach template, this function returns the coach_template used to assign to a client
+    template = generate_coach_template_model(db_session, 1)
+    db_session.add(template)
+    db_session.commit()
+    db_session.refresh(template)
+
+    result, code = request(client, "GET", "/coach/exercise?coach_exercise_id={}".format(template.sessions[0].coach_exercises[0].id))
+    
+    assert code == 200
+    assert result != None
+    assert result['id'] == template.sessions[0].coach_exercises[0].id
+
+
+def test_get_exercises(client, db_session):
+    result, code = role_check(client, db_session, "GET", "/exercises")
+    assert code == 401
+    assert result['error'] == "Expected role of COACH"
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # Create exercises
+    db_session.add(Exercise(id=1, category='Lower Back', name='Deadlifts'))
+    db_session.add(Exercise(id=2, category='Latisimus Dorsi', name='Pullups'))
+    db_session.commit()
+
+    result, code = request(client, "GET", "/exercises")
+    
+    assert code == 200
+    assert result != None
+    assert len(result['exercises']) == 2
+
+def test_post_exercise(client, db_session):
+    # Create a coach to create the template and a client to assign it to
+    coach_user = sign_up_user_for_testing(client, test_coach)
+    assert coach_user['user'] != None
+    assert coach_user['user']['role'] == 'COACH'
+
+    # Sign in as the coach
+    login_resp = login_user_for_testing(client, test_coach)
+    assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    body = {
+        'category': 'Back',
+        'name': 'Lateral Rows'
+    }
+  
+    result, code = request(client, "POST", "/exercise", data=body)
+    assert code == 200
+    assert result != None
+    assert len(result['exercises']) == 1
+    assert result['exercises'][0]['category'] == body['category']
+    assert result['exercises'][0]['name'] == body['name']
+
 
 # TRAINING LOG
 def test_get_client_training_logs(client, db_session):
