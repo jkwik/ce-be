@@ -654,12 +654,14 @@ def sign_up_user_for_testing(client, user):
         'Content-Type': mimetype,
         'Accept': mimetype
     }
+    # Set test to true so that an album isn't created for the user
     data = {
         'first_name': user['first_name'],
         'last_name': user['last_name'],
         'email': user['email'],
         'password': user['password'],
-        'role': user['role']
+        'role': user['role'],
+        'test': True
     }
     
     resp = client.post('signUp', data=json.dumps(data), headers=headers)
