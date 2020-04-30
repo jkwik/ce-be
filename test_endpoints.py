@@ -899,7 +899,7 @@ def test_get_coach_template(client, db_session):
 def test_get_coach_templates(client, db_session):
     # role check
     result, code = role_check(client, db_session, "GET", '/coach/templates')
-    assert code == 400
+    assert code == 401
     assert result['error'] == "Expected role of COACH"
    
     # Create and sign into the coach
