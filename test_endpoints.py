@@ -4,7 +4,7 @@ import pytest
 import json
 import pdb
 import unittest
-from backend import app, db, bcrypt
+from backend import app, db, bcrypt, mail
 from backend.models.user import User, UserSchema, user_schema, Role
 from backend.models.client_templates import ClientTemplate, ClientSession, ClientExercise, CheckIn, TrainingEntry
 from backend.models.coach_templates import CoachTemplate, CoachSession, CoachExercise, Exercise
@@ -12,6 +12,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from datetime import datetime as dt
 from datetime import date, timedelta
+from flask_mail import Mail
 
 DATE_FORMAT = '%Y-%m-%d'
 
@@ -50,6 +51,10 @@ def _db():
     # Comment above and uncomment below to persist the database to the local folder structure
     # app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///test.db"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['TESTING'] = True
+    assert app.testing
+
+    mail = Mail(app)
 
     # Create sessions table to handle login sessions
     session = Session(app)
@@ -279,14 +284,10 @@ def test_terminate_client(client, db_session):
     assert resp['user']['approved'] == None
 
 def test_delete_user(client, db_session):
-    # create the user to delete
-    user = User(
-        first_name='Test', last_name='Test', email='test@test.com', password='test', role='CLIENT',
-        verified=True
-    )
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
+    # sign up a client to delete
+    client_user = sign_up_user_for_testing(client, test_client)
+    assert client_user['user'] != None
+    assert client_user['user']['role'] == 'CLIENT'
 
     # sign up a coach
     coach_user = sign_up_user_for_testing(client, test_coach)
@@ -310,7 +311,7 @@ def test_delete_user(client, db_session):
     assert resp['error'] == 'No user found with passed id'
 
     # Delete user
-    url = "/user?id={}".format(user.id)
+    url = "/user?id={}".format(client_user['user']['id'])
     resp, code = request(client, "DELETE", url)
 
     user = db_session.query(User).get(user.id)
