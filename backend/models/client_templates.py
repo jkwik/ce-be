@@ -137,12 +137,13 @@ class CheckIn(db.Model):
     back = db.Column(db.String, nullable=True)
     side_a = db.Column(db.String, nullable=True)
     side_b = db.Column(db.String, nullable=True)
+    coach_viewed = db.Column(db.Boolean, nullable=False)
 
 
 
 class CheckInSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'client_template_id', 'coach_comment', 'client_comment', 'start_date', 'end_date', 'completed', 'front', 'back', 'side_a', 'side_b')
+        fields = ('id', 'client_template_id', 'coach_comment', 'client_comment', 'start_date', 'end_date', 'completed', 'front', 'back', 'side_a', 'side_b', 'coach_viewed')
 
 check_in_schema = CheckInSchema()
 check_in_schemas = CheckInSchema(many=True) 
