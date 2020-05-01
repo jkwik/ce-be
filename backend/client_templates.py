@@ -523,7 +523,7 @@ def getTrainingLog(token_claims):
 @app.route("/checkin", methods=["GET"])
 @http_guard(renew=True, nullable=False)
 def getCheckin(token_claims):
-    if token_claims['role'] == Role.COACH.name:
+    if 'checkin_id' in request.args:
         checkin_id = request.args.get('checkin_id')
 
         if checkin_id == None:
@@ -533,6 +533,11 @@ def getCheckin(token_claims):
 
         # get the checkin from the Checkins table with given checkin_id
         checkin = CheckIn.query.filter_by(id=checkin_id).first()
+
+        if checkin == None:
+            return {
+            "error": "No checkin found with the supplied parameter"
+        }, 404
     else:
         client_id = request.args.get('client_id')
 
@@ -550,20 +555,64 @@ def getCheckin(token_claims):
         # get checkin using the client_template_id
         checkin = CheckIn.query.filter_by(client_template_id=template.id).first()
 
-    if checkin == None:
-            return {
-            "error": "No checkin found with the supplied parameter"
-        }, 404
+        if checkin == None:
+                return {
+                "error": "No checkin found with the supplied parameter"
+            }, 404
     
-    # format the checkin_start_date and checkin_end_date so that we can compare them to the session_completed_date
-    checkin_start_date = dt.strptime(str(checkin.start_date), '%Y-%m-%d')
-
     # get the client template that the given checkin_id corresponds to
     client_template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
     if client_template == None:
         return {
         "error": "No client template found with supplied checkin_id"
     }, 404
+
+    # update table fields only if the coach has called this endpoint
+    if token_claims['role'] == Role.COACH.name:
+        checkin.coach_viewed = True
+        # var to check if all checkins belonging to client has coach_viewed as true
+        all_true = True
+        # get user from client_template
+        user = User.query.filter_by(id=client_template.user_id).first()
+        if user == None:
+            return {
+            "error": "No user found with supplied checkin_id"
+        }, 404
+
+        # get all client_templates belonging to user
+        templates = ClientTemplate.query.filter_by(user_id=user.id).all()
+        if templates == None:
+            return {
+            "error": "No template found with supplied checkin_id"
+        }, 404
+        # get checkins belonging to each of those client_templates
+        for template in templates:
+            checkin = CheckIn.query.filter_by(client_template_id=template.id).first()
+            # check each coach_viewed column
+            if checkin.coach_viewed == False:
+                #  if one of these fields is flase we set our global var (all_true) to false
+                all_true = False
+
+        # if all_true is True, set boolean in user to false
+        if all_true == True:
+            user.check_in = False
+        else:
+            #  else, set user.check_in to true
+            user.check_in = True
+        
+        try:
+            db.session.commit()
+            db.session.refresh(user)
+            db.session.refresh(checkin)
+        except Exception as e:
+            print(e)
+            return {
+                "error": "Internal Server Error"
+            }, 500
+            raise
+
+    # format the checkin_start_date and checkin_end_date so that we can compare them to the session_completed_date
+    checkin_start_date = dt.strptime(str(checkin.start_date), '%Y-%m-%d')
 
     # this array will store the sessions that were completed within the span of the given checkin's start and end dates
     valid_sessions = []
