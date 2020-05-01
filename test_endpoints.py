@@ -531,6 +531,19 @@ def test_post_client_template(client, db_session):
     assert resp['sessions'] != None
     assert len(resp['sessions']) == 1
 
+    # error handling (check client_template error)
+    data['template_id'] = 10
+    data['role'] = 'COACH'
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 404
+    assert resp['error'] == 'No coach template found with coach_template_id: 10'
+
+    # check error handling for user role
+    data['role'] = 'User'
+    resp, code = request(client, "POST", "/client/template", data=data)
+    assert code == 400
+    assert resp['error'] == "Parameter role should be either COACH or CLIENT" 
+
 def test_put_client_template(client, db_session):
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
@@ -636,6 +649,12 @@ def test_get_client_next_session(client, db_session):
     assert code == 200
     assert next_session != None
     assert next_session['completed'] == False and next_session['client_template_id'] == client_template['id'] and client_template['active'] == True
+
+    # check error handling
+    url = '/client/session/next'
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "No query parameter client_id found in request"
 
 def test_post_client_session(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -1414,6 +1433,12 @@ def test_get_client_training_logs(client, db_session):
     assert len(resp['sessions']) == 1
     assert len(resp['sessions'][0]['training_entries']) == 1
 
+    # check error handling
+    url = '/client/trainingLog'
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "No query parameter client_id found in query parameter" 
+
 # ------------------------------------- CHECKINS -------------------------------------
 def test_get_checkins(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -1524,6 +1549,12 @@ def test_get_checkin(client, db_session):
     assert checkin_resp['sessions'][0]['completed'] == True
     assert session_completed_date > checkin_start_date
 
+    # check error handling
+    url = '/checkin'
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "client_id not found in query parameter, client_id must be passed when a client calls this endpoint"  
+
 def test_get_client_checkins(client, db_session):
     # Create a coach to create the template and a client to assign it to
     coach_user = sign_up_user_for_testing(client, test_coach)
@@ -1555,6 +1586,12 @@ def test_get_client_checkins(client, db_session):
     # because the checkin.end_date will be a day from now, both arrays should be empty
     # we do not want to retrieve checkins that have not reached their end date
     assert len(checkins['completed']) == 0 and len(checkins['uncompleted']) == 0
+
+    # check error handling
+    url = '/client/checkins'
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "No query parameter client_id found in request"
 
 def test_submit_checkin(client, db_session):
     # Create a coach to create the template and a client to assign it to
