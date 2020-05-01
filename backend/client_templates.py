@@ -763,19 +763,20 @@ def submitCheckin(token_claims):
         if 'test' in body:
             if body['test'] == True:
                 create_image = False
+
+        template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
+        if template == None:
+            return {
+                "error": "No template found with checkin_id: " + str(body['check_in']['id'])
+            }, 404
+        user = User.query.filter_by(id=template.user_id).first()
+        if user == None:
+            return {
+                "error": "No user found with client_template_id: " + str(body['check_in']['id'])
+            }, 404
         
         if create_image:
             # get the album the image needs to be added to
-            template = ClientTemplate.query.filter_by(id=checkin.client_template_id).first()
-            if template == None:
-                return {
-                    "error": "No template found with checkin_id: " + str(body['check_in']['id'])
-                }, 404
-            user = User.query.filter_by(id=template.user_id).first()
-            if user == None:
-                return {
-                    "error": "No user found with client_template_id: " + str(body['check_in']['id'])
-                }, 404
             album = user.album_deletehash              
             if 'front' in request.files:
                 front = request.files['front']
