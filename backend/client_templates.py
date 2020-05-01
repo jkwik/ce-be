@@ -196,7 +196,7 @@ def createClientTemplate(token_claims):
     check_in_end_date = check_in_start_date + timedelta(days=len(client_template.sessions))
     client_check_in = CheckIn(
         completed=False, start_date=check_in_start_date.strftime(DATE_FORMAT),
-        end_date=check_in_end_date.strftime(DATE_FORMAT)
+        end_date=check_in_end_date.strftime(DATE_FORMAT), coach_viewed=False
     )
     client_template.check_in = client_check_in
 
@@ -814,17 +814,22 @@ def submitCheckin(token_claims):
                     }, 500
                 checkin.side_b = image_link
 
-        try:
-            db.session.commit()
-            db.session.refresh(checkin)
-        except Exception as e:
-            print(e)
-            return {
-                "error": "Internal Server Error here"
-            }, 500
-            raise
-        check_in_result = check_in_schema.dump(checkin)
+    # set user.check_in to true only if a client has accessed this endpoint
+    if token_claims['role'] == Role.CLIENT.name:
+        user.check_in = True
 
+    try:
+        db.session.commit()
+        db.session.refresh(checkin)
+        db.session.refresh(user)
+    except Exception as e:
+        print(e)
+        return {
+            "error": "Internal Server Error here"
+        }, 500
+        raise
+    check_in_result = check_in_schema.dump(checkin)
+    
     return {
         "check_in": check_in_result,
         "sessions": client_session_results
