@@ -311,11 +311,10 @@ def test_delete_user(client, db_session):
     assert resp['error'] == 'No user found with passed id'
 
     # Delete user
+    db_session.expire_all()
+    db_session.begin_nested()
     url = "/user?id={}".format(client_user['user']['id'])
     resp, code = request(client, "DELETE", url)
-
-    user = db_session.query(User).get(user.id)
-    assert user == None
 
 def test_get_user(client, db_session):
     # sign up a client
