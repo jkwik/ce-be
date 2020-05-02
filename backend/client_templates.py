@@ -353,7 +353,7 @@ def createClientSession(token_claims):
     client_template = ClientTemplate.query.filter_by(id=body['client_template_id']).first()
     if client_template == None:
         return {
-            "error": "No client template found with template id: " + str(body['client_template'])
+            "error": "No client template found with template id: " + str(body['client_template_id'])
         }, 404
 
     # Check for duplicate session name
