@@ -98,6 +98,7 @@ def role_check(client, db_session, request_type, url):
     # Sign in as the client
     login_resp = login_user_for_testing(client, test_client)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
     resp, code = request(client, request_type, url)
     return resp, code
     
@@ -558,6 +559,14 @@ def test_put_client_template(client, db_session):
     login_resp = login_user_for_testing(client, test_coach)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
 
+    # error test: pass an invalid id
+    data = {
+        "id": 10
+    }
+    resp, code = request(client, "PUT", '/client/template', data=data)
+    assert code == 404
+    assert resp['error'] == "No client template found with id: " + str(data['id'])
+
     # Create the client template, this function returns the coach_template used to assign to a client
     client_template, code, coach_template = create_client_template(client, db_session, client_user['user']['id'])
     assert code == 200
@@ -617,11 +626,33 @@ def test_get_client_session(client, db_session):
     assert client_template['name'] == coach_template.name and client_template['user_id'] == client_user['user']['id']
 
     # Retrieve a particular session from the client template
-    url = '/client/session?client_session_id={}'.format(client_template['id'], client_template['sessions'][0]['id'])
+    url = '/client/session?client_session_id={}'.format(client_template['sessions'][0]['id'])
     client_session, code = request(client, 'GET', url)
     assert code == 200
     assert client_session != None
     assert client_session['id'] == client_template['sessions'][0]['id']
+
+    # error test: pass all vars
+    session_id = 10
+    template_slug = "test-slug"
+    session_slug = "session_slug"
+
+    url = '/client/session?client_session_id={}&client_template_slug={}&client_session_slug={}'.format(session_id, template_slug, session_slug)
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "Pass EITHER client_session_id OR client_template_slug + client_session_slug in the request parameter"
+
+    # error test: pass template_slug != None and session_slug == None
+    url = '/client/session?client_template_slug={}'.format(template_slug)
+    resp, code = request(client, 'GET', url)
+    assert code == 400
+    assert resp['error'] == "Pass EITHER client_session_id OR client_template_slug + client_session_slug in the request parameter"
+
+    # error test: wrong template slug
+    url = '/client/session?client_template_slug={}&client_session_slug={}'.format(template_slug, session_slug)
+    resp, code = request(client, 'GET', url)
+    assert code == 404
+    assert resp['error'] == "No client template found with slug: " + template_slug
 
 def test_get_client_next_session(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -655,6 +686,13 @@ def test_get_client_next_session(client, db_session):
     resp, code = request(client, 'GET', url)
     assert code == 400
     assert resp['error'] == "No query parameter client_id found in request"
+
+    # check error handling: wrong client_id
+    client_id = 100
+    url = '/client/session/next?client_id={}'.format(client_id)
+    resp, code = request(client, 'GET', url)
+    assert code == 404
+    assert resp['error'] == "No active template found with client_id: " + str(client_id)
 
 def test_post_client_session(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -721,7 +759,37 @@ def test_post_client_session(client, db_session):
     assert client_session_2['name'] == 'Feet Day 2'
     assert len(client_session_2['exercises']) == 0 and len(client_session_2['training_entries']) == 1
 
+    # error test: missing arg
+    data3 = {
+        'name': 'Feet Day 1',
+        'exercises': [
+            {
+                "name": "Tip Toe",
+                "category": "Arch",
+                "sets": 3,
+                "reps": 15,
+                "weight": 150,
+                "order": 1
+		    },
+        ]
+    }
+    resp, code = request(client, "POST", '/client/session', data=data3)
+    assert code == 400
+    assert resp['error'] == "Must specify client_template_id (int) name (string) and exercises (array)"
 
+    # error test: invalid client_template_id
+    data2['client_template_id'] = 100
+
+    resp, code = request(client, "POST", '/client/session', data=data2)
+    assert code == 404
+    assert resp['error'] == "No client template found with template id: " + str(data2['client_template_id'])
+
+    # error test: invalid session name
+    data2['client_template_id'] = client_template['id']
+    data2['name'] = 'Feet Day 1'
+    resp, code = request(client, "POST", '/client/session', data=data2)
+    assert code == 409
+    assert resp['error'] == "Duplicate session name found in template: " + str(data2['name'])
 
 def test_put_client_session(client, db_session):
     # Create a coach to create the template and a client to assign it to
@@ -768,6 +836,18 @@ def test_put_client_session(client, db_session):
     assert resp['name'] == 'Client session name change'
     assert resp['completed'] == True
     assert resp['completed_date'] == (date.today() + timedelta(days=resp['order'])).strftime(DATE_FORMAT)
+
+    # test error: wrong id
+    data['id'] = 100
+    resp, code = request(client, "PUT", '/client/session', data=data)
+    assert code == 404
+    assert resp['error'] == "No client session found with supplied id"
+    # test error: missing id
+    del data['id']
+    resp, code = request(client, "PUT", '/client/session', data=data)
+    assert code == 400
+    assert resp['error'] == "No id parameter found in request body"
+
 
 def test_get_active_client_template(client, db_session):
     # Create and sign into the client
@@ -1027,6 +1107,24 @@ def test_get_coach_template(client, db_session):
 
     login_resp = login_user_for_testing(client, test_coach)
     assert login_resp['user']['id'] != None and login_resp['user']['id'] != ""
+
+    # test enpoint without creating templates, should result in an error
+    url = '/coach/template'
+    resp, code = request(client, "GET", url)
+    assert code == 400
+    assert resp['error'] == "Pass EITHER coach_template_id OR coach_template_slug in the request parameter"
+    
+    # test slug
+    slug = "test-fail"
+    url = '/coach/template?coach_template_slug={}'.format(slug)
+    slug_resp, code = request(client, "GET", url)
+    assert slug_resp['error'] == "Coach_template not found with given slug: " + slug
+
+    # template_id
+    template_id = 10
+    url = '/coach/template?coach_template_id={}'.format(template_id)
+    slug_resp, code = request(client, "GET", url)
+    assert slug_resp['error'] == "Coach_template not found with given id: " + str(template_id) 
 
     # Create a template for retrieval
     template = generate_coach_template_model(db_session, 1)
@@ -1486,6 +1584,7 @@ def test_get_checkins(client, db_session):
     assert resp != None
     assert len(resp['completed']) == 1
     assert len(resp['uncompleted']) == 1
+ 
 
 def test_get_checkin(client, db_session):
    # Create a coach to create the template and a client to assign it to
@@ -1553,7 +1652,22 @@ def test_get_checkin(client, db_session):
     url = '/checkin'
     resp, code = request(client, 'GET', url)
     assert code == 400
-    assert resp['error'] == "client_id not found in query parameter, client_id must be passed when a client calls this endpoint"  
+    assert resp['error'] == "client_id not found in query parameter, client_id must be passed when a client calls this endpoint"
+    
+    # test error: wrong checkin_id
+    checkin_id = 100
+    url = '/checkin?checkin_id={}'.format(checkin_id)
+    checkin_resp, code = request(client, 'GET', url)
+    assert code == 404
+    assert checkin_resp['error'] == "No checkin found with the supplied parameter"
+
+    # test error: wrong client_id
+    client_id = 100
+    url = '/checkin?client_id={}'.format(client_id)
+    checkin_resp, code = request(client, 'GET', url)
+    assert code == 404
+    assert checkin_resp['error'] == "No active template found with client_id: " + str(client_id) 
+    
 
 def test_get_client_checkins(client, db_session):
     # Create a coach to create the template and a client to assign it to
