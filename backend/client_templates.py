@@ -69,10 +69,12 @@ def getActiveClientTemplate(token_claims):
 
     # We want to grab all active templates so that we can check that there is only one
     templates = ClientTemplate.query.filter_by(user_id=user_id, active=True).all()
-    if len(templates) != 1:
+    if len(templates) > 1:
         return {
             "error": "More than 1 active template found for client"
         }, 409
+    elif len(templates) <= 0:
+        return {}
 
     templateResult = client_template_schema.dump(templates[0])
 
