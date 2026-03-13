@@ -17,7 +17,7 @@ setup(
         'python-dotenv',
         'email_validator',
         'flask-bcrypt',
-        'pyjwt==1.4.2',
+        'pyjwt==2.12.0',
         'flask-session',
         'flask-mail',
         'pytest',
